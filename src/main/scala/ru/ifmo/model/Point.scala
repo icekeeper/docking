@@ -10,6 +10,8 @@ class Point(xc: Double, yc: Double, zc: Double) {
 
   override def toString: String = s"($x, $y, $z)"
 
+  def asVector(): Vector = new Vector(x, y, z)
+
   def distance(that: Point) = FastMath.sqrt((this.x - that.x) * (this.x - that.x) + (this.y - that.y) * (this.y - that.y) + (this.z - that.z) * (this.z - that.z))
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[Point]

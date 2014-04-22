@@ -15,13 +15,13 @@ class Surface(
   val normals: Array[Vector] = nc
   val electrostaticPotentials: Array[Double] = ec
   val lipophilicPotentials: Array[Double] = lc
-  val surfaces: Array[(Int, Int, Int)] = sc
+  val faces: Array[(Int, Int, Int)] = sc
 
   lazy val meshResolution: Double = {
-    val edgesLengthSum = surfaces.foldLeft(0.0) {
+    val edgesLengthSum = faces.foldLeft(0.0) {
       case (acc, (a, b, c)) => acc + (points(a) distance points(b)) + (points(b) distance points(c)) + (points(a) distance points(c))
     }
-    edgesLengthSum / ((surfaces.length + points.length - 2) * 2) //euler formula for edges count
+    edgesLengthSum / ((faces.length + points.length - 2) * 2) //euler formula for edges count
   }
 
 }

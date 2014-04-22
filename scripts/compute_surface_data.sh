@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ./surface_normalization.scala $1.obj $1.obj
-sed -n 's/v \([0-9\.\-]*\) \([0-9\.\-]*\) \([0-9\.\-]*\).*/\1,\2,\3/p' < $1.obj > $1.csv
+sed -n 's/v \([Ee0-9\.\-]*\) \([Ee0-9\.\-]*\) \([Ee0-9\.\-]*\).*/\1,\2,\3/p' < $1.obj > $1.csv
 ./pyMLP.py -v -i $1.pdb -o $1_lip.dx
 python pdb2pqr-1.8/pdb2pqr.py --ff=PARSE --apbs-input $1.pdb $1.pqr
 LC_ALL=en_UK.utf-8 awk -v name=$1 '{ if ($0 ~ /[fc]glen.*/)  printf "    %s %f %f %f\n", $1, $2 + 200, $3 + 200, $4 + 200; else if($0 ~ /write pot dx.*/) printf "    write pot dx %s_pot\n", name ; else print $0;  }' $1.in > $1.tmp.in && mv $1.tmp.in $1.in
