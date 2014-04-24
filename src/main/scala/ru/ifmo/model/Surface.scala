@@ -24,6 +24,12 @@ class Surface(
     edgesLengthSum / ((faces.length + points.length - 2) * 2) //euler formula for edges count
   }
 
+  def transform(matrix: Matrix): Surface = {
+    val transformedPoints = points.map(p => GeometryTools.transformPoint(p, matrix))
+    val transformedNormals = normals.map(n => GeometryTools.transformVector(n, matrix))
+    new Surface(transformedPoints, transformedNormals, faces, electrostaticPotentials, lipophilicPotentials)
+  }
+
 }
 
 object Surface {
