@@ -2,6 +2,8 @@ package ru.ifmo.model
 
 import java.io.File
 import scala.io.Source
+import ru.ifmo.docking.lip.LipophilicityCalculator
+import ru.ifmo.docking.geometry
 
 class Surface(
                pc: Array[Point],
@@ -33,7 +35,8 @@ class Surface(
 }
 
 object Surface {
-  def read(surfaceFile: File, electrostaticFile: File, lipophilicityFile: File): Surface = {
+
+  def read(surfaceFile: File, electrostaticFile: File, fiPotentials: File, pdbFile: File): Surface = {
     val points: Array[Point] = readPoints(surfaceFile)
     println(s"Read ${points.length} points")
     new Surface(
@@ -41,8 +44,13 @@ object Surface {
       readNormals(surfaceFile),
       readSurfaces(surfaceFile),
       readCsv(electrostaticFile),
-      readCsv(lipophilicityFile)
+      computeLipophilicity(points, fiPotentials, pdbFile)
     )
+  }
+
+  private def computeLipophilicity(points: Array[Point], fiPotentials: File, pdbFile: File): Array[Double] = {
+    val calculator: LipophilicityCalculator = LipophilicityCalculator.construct(pdbFile, fiPotentials)
+    points.map(p => calculator.compute(new geometry.Point(p.x, p.y, p.z)))
   }
 
   private def readPoints(surfaceFile: File): Array[Point] = {

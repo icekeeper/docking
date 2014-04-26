@@ -11,13 +11,16 @@ object SpinImageTest {
     val firstDir = s"data/${args(0)}_data"
     val secondDir = s"data/${args(1)}_data"
 
-    val first = Surface.read(new File(firstDir, s"${args(0)}.obj"), new File(firstDir, s"${args(0)}_pot.csv"), new File(firstDir, s"${args(0)}_lip.csv"))
-    val second = Surface.read(new File(secondDir, s"${args(1)}.obj"), new File(secondDir, s"${args(1)}_pot.csv"), new File(secondDir, s"${args(1)}_lip.csv"))
+    val fiPotentials: File = new File("data", "fi_potentials.txt")
+    val first = Surface.read(new File(firstDir, s"${args(0)}.obj"), new File(firstDir, s"${args(0)}_pot.csv"), fiPotentials, new File(firstDir, s"${args(0)}.pdb"))
+    val second = Surface.read(new File(secondDir, s"${args(1)}.obj"), new File(secondDir, s"${args(1)}_pot.csv"), fiPotentials, new File(secondDir, s"${args(1)}.pdb"))
 
     //                printClosesPoints(first, second)
     //    printClosesPointsSimilarity(first, second)
-    printMaxSimilarity(first, second)
+    //    printMaxSimilarity(first, second)
     //    printPLYFiles(first, second)
+    printContactPointsStats(first, second)
+    //    printSurfaceStats(first, second)
   }
 
   def printPLYFiles(first: Surface, second: Surface) {
@@ -277,6 +280,89 @@ object SpinImageTest {
     println(s"Correlation pairs computed. Total size: ${highCorrelationPairs.size}")
 
     (highCorrelationPairs.seq.sortBy(_._3) reverse) take 40000
+  }
+
+  def printSurfaceStats(first: Surface, second: Surface) {
+
+    val firstPoints = for (a <- first.points.indices.iterator; b <- second.points.indices.iterator) yield first.points(a) distance first.points(b)
+    println(s"Diameter of first protein: ${firstPoints.max}")
+
+    val secondPoints = for (a <- second.points.indices.iterator; b <- second.points.indices.iterator) yield second.points(a) distance second.points(b)
+    println(s"Diameter of second protein: ${secondPoints.max}")
+
+    val points = for (a <- first.points.indices.iterator; b <- second.points.indices.iterator) yield (a, b, first.points(a) distance second.points(b))
+
+    val closePairs = points.filter(_._3 < 1.0).toArray
+
+    val pairPairs = for (a <- closePairs; b <- closePairs) yield (first.points(a._1) distance first.points(b._1), second.points(a._2) distance second.points(b._2))
+    println(s"Contact surface diameter ${pairPairs.maxBy(i => Math.max(i._1, i._2))}")
+
+  }
+
+  def printContactPointsStats(first: Surface, second: Surface) {
+    val spinImageBound: Double = 7.0
+    println(s"Spin image bound $spinImageBound")
+
+    def spinImageStack(surface: Surface): IndexedSeq[(Int, SpinImage)] = ((0 until surface.points.length).par map {
+      i => (i, SpinImage.compute(i, surface, spinImageBound, 1.0))
+    }).toIndexedSeq
+
+    val firstStack: IndexedSeq[(Int, SpinImage)] = spinImageStack(first)
+    println(s"Computed first stack ")
+    val secondStack: IndexedSeq[(Int, SpinImage)] = spinImageStack(second)
+    println(s"Computed second stack ")
+
+    val secondStackGrouped = secondStack.grouped(secondStack.size / 1024).toSeq
+
+    val data = secondStackGrouped.par flatMap {
+      group: IndexedSeq[(Int, SpinImage)] => {
+        val buffer = scala.collection.mutable.ArrayBuffer.empty[(Double, Double, Double, Double)]
+        for (a <- group; b <- firstStack) {
+          val lip = Math.abs(first.lipophilicPotentials(b._1) - second.lipophilicPotentials(a._1))
+          val pot = Math.abs(first.electrostaticPotentials(b._1) + second.electrostaticPotentials(a._1))
+          val correlation = a._2 correlation b._2
+          val distance = first.points(b._1) distance second.points(a._1)
+
+          buffer += ((distance, lip, pot, correlation))
+        }
+        buffer
+      }
+    }
+
+    println(s"Total points count ${data.size}")
+
+    val maxLipDiff = getMaxLipDifference(first, second)
+    val maxElDiff = getMaxElDifference(first, second)
+
+    println(s"Max lip diff $maxLipDiff")
+    println(s"Max el diff $maxElDiff")
+
+    def complexCorrelation(data: (Double, Double, Double, Double)): Double = {
+      data._4 + 0.5 * (1 - data._2 / maxLipDiff) + 0.5 * (1 - data._3 / maxElDiff)
+    }
+    def partialComplexCorrelation(data: (Double, Double, Double, Double)): Double = {
+      0.5 * (1 - data._2 / maxLipDiff) + 0.5 * (1 - data._3 / maxElDiff)
+    }
+
+
+    println(s"Minimum distance ${data.minBy(_._1)}")
+    println(s"Closest points count with dist < 1: ${data.count(_._1 < 1.0)}")
+    println(s"Closest points count with partial correlation > 0.9: ${data.count(partialComplexCorrelation(_) > 0.9)}")
+
+    val sortedByLip: Seq[(Double, Double, Double, Double)] = data.seq.sortBy(-complexCorrelation(_))
+    val topCandidates: Seq[((Double, Double, Double, Double), Int)] = sortedByLip.take(50000).zipWithIndex.filter(p => p._1._1 < 1.0)
+    println(s"Top candidates count: ${topCandidates.size}")
+    topCandidates.foreach(p => println(s"Position ${p._2} data ${p._1} complex correlation ${complexCorrelation(p._1)}"))
+
+
+  }
+
+  def getMaxLipDifference(first: Surface, second: Surface): Double = {
+    (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b)).max
+  }
+
+  def getMaxElDifference(first: Surface, second: Surface): Double = {
+    (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b)).max
   }
 
   def printClosesPointsSimilarity(first: Surface, second: Surface) {
