@@ -38,7 +38,6 @@ object Surface {
 
   def read(surfaceFile: File, electrostaticFile: File, fiPotentials: File, pdbFile: File): Surface = {
     val points: Array[Point] = readPoints(surfaceFile)
-    println(s"Read ${points.length} points")
     new Surface(
       points,
       readNormals(surfaceFile),

@@ -47,6 +47,12 @@
             <scope>test</scope>
         </dependency>
 
+        <dependency>
+            <groupId>com.github.wookietreiber</groupId>
+            <artifactId>scala-chart_2.11</artifactId>
+            <version>0.4.2</version>
+        </dependency>
+
 
     </dependencies>
 

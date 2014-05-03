@@ -1,11 +1,11 @@
 read
-    mol pqr disposed-k.pqr
+    mol pqr 1G6V_A.pqr
 end
 elec 
     mg-auto
-    dime 129 129 97
-    cglen 269.705100 267.104100 255.877300
-    fglen 261.003000 259.473000 252.869000
+    dime 129 129 161
+    cglen 282.676100 282.421100 289.034100
+    fglen 268.633000 268.483000 272.373000
     cgcent mol 1
     fgcent mol 1
     mol 1
@@ -21,13 +21,13 @@ elec
     temp 298.15
     calcenergy total
     calcforce no
-    write pot dx disposed-k_pot
+    write pot dx 1G6V_A_pot
 end
 elec 
     mg-auto
-    dime 129 129 97
-    cglen 269.705100 267.104100 255.877300
-    fglen 261.003000 259.473000 252.869000
+    dime 129 129 161
+    cglen 282.676100 282.421100 289.034100
+    fglen 268.633000 268.483000 272.373000
     cgcent mol 1
     fgcent mol 1
     mol 1

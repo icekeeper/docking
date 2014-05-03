@@ -2,8 +2,10 @@ package ru.ifmo.main
 
 import java.io.{PrintWriter, File}
 import ru.ifmo.model._
-import scala.io._
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
+import scalax.chart.api._
+import scala.io.Source
+import scala.collection.parallel.ParSeq
 
 object SpinImageTest {
 
@@ -13,14 +15,19 @@ object SpinImageTest {
 
     val fiPotentials: File = new File("data", "fi_potentials.txt")
     val first = Surface.read(new File(firstDir, s"${args(0)}.obj"), new File(firstDir, s"${args(0)}_pot.csv"), fiPotentials, new File(firstDir, s"${args(0)}.pdb"))
+    println(s"First surface read with ${first.points.length} points")
     val second = Surface.read(new File(secondDir, s"${args(1)}.obj"), new File(secondDir, s"${args(1)}_pot.csv"), fiPotentials, new File(secondDir, s"${args(1)}.pdb"))
+    println(s"Second surface read with ${second.points.length} points")
 
     //                printClosesPoints(first, second)
     //    printClosesPointsSimilarity(first, second)
     //    printMaxSimilarity(first, second)
     //    printPLYFiles(first, second)
-    printContactPointsStats(first, second)
+    //    printContactPointsStats(first, second)
     //    printSurfaceStats(first, second)
+    searchDockingSolutions(first, second)
+    //    drawLipHistogram(first, second)
+    //    drawElHistogram(first, second)
   }
 
   def printPLYFiles(first: Surface, second: Surface) {
@@ -164,7 +171,7 @@ object SpinImageTest {
       a: Int => {
         val candidates = (a + 1 until correlationPairs.size).filter(isGoodPair(a, _))
 
-        val buffer = scala.collection.mutable.ArrayBuffer.empty[(Int, Int, Int)]
+        val buffer = mutable.ArrayBuffer.empty[(Int, Int, Int)]
 
         for (bi <- candidates.indices; ci <- bi + 1 until candidates.size) {
           val b = candidates(bi)
@@ -245,8 +252,122 @@ object SpinImageTest {
 
   }
 
+  def searchDockingSolutions(first: Surface, second: Surface) {
+    val startTime = System.currentTimeMillis()
+    def time = System.currentTimeMillis() - startTime
 
-  def findMaxCorrelationPairs(first: Surface, second: Surface): Seq[(Int, Int, Double)] = {
+    val correlatedPairs = findMaxCorrelationPairs(first, second, pairsCount = 50000)
+    println(s"[$time] Correlation bound: ${correlatedPairs.last._3}")
+
+    val firstDiameter = (for (a <- first.points.indices.iterator; b <- first.points.indices.iterator) yield first.points(a) distance first.points(b)).max
+    val secondDiameter = (for (a <- second.points.indices.iterator; b <- second.points.indices.iterator) yield second.points(a) distance second.points(b)).max
+
+    val contactSurfaceLimit = Math.max(firstDiameter, secondDiameter) * 0.6
+    println(s"[$time] First protein max size: $firstDiameter Second protein max size: $secondDiameter Contact surface size limit: $contactSurfaceLimit")
+
+    def isGoodPair(firstIndex: Int, secondIndex: Int) = {
+      val firstPair = correlatedPairs(firstIndex)
+      val secondPair = correlatedPairs(secondIndex)
+      val firstDist = first.points(firstPair._1) distance first.points(secondPair._1)
+      val secondDist = second.points(firstPair._2) distance second.points(secondPair._2)
+      val delta: Double = Math.abs(firstDist - secondDist)
+
+      (firstPair._1 != secondPair._1
+        && firstPair._2 != secondPair._2
+        && delta < 1
+        && firstDist < contactSurfaceLimit
+        && secondDist < contactSurfaceLimit)
+    }
+
+    val indices = 0 until correlatedPairs.size
+
+    val linesData = indices.par.map {
+      a: Int => {
+        indices.filter(x => x != a && isGoodPair(a, x)).toSet
+      }
+    }.seq
+
+    println(s"[$time] Max lines for point: ${linesData.maxBy(_.size).size}")
+    println(s"[$time] Min lines for point: ${linesData.minBy(_.size).size}")
+    println(s"[$time] Average lines for point: ${linesData.foldLeft(0.0)((a, s) => a + s.size) / linesData.size}")
+
+    def tomita(r: Set[Int], p: Set[Int], x: Set[Int]): Seq[Set[Int]] = {
+      if (p.isEmpty) {
+        if (x.isEmpty && r.size >= 3) List(r) else List.empty
+      } else {
+        val pivot: Int = (p.iterator ++ x.iterator).maxBy(u => (p & linesData(u)).size)
+        val candidates = (p -- linesData(pivot)).toSeq.par
+        candidates.zipWithIndex.flatMap {
+          case (v, i) => tomita(r + v, p -- candidates.slice(0, i), x ++ candidates.slice(0, i))
+        }.seq
+      }
+    }
+
+    val cliques: Seq[Set[Int]] = tomita(Set.empty, indices.toSet, Set.empty)
+
+    println(s"[$time] Total cliques count: ${cliques.size}")
+    println(s"[$time] Max clique size: ${cliques.maxBy(_.size).size}")
+    println(s"[$time] Min clique size: ${cliques.minBy(_.size).size}")
+
+    val initialSolutions = cliques.filter(_.forall(x => (first.points(correlatedPairs(x)._1) distance second.points(correlatedPairs(x)._2)) < 1.0))
+    println(s"[$time] Cliquest lead to initial complex count: ${initialSolutions.size}")
+    initialSolutions.foreach(c => println(s"[$time] $c"))
+
+    //    def fitsToBasket(buffer: ArrayBuffer[(Int, Int)], pair: (Int, Int), p: Int): Boolean = {
+    //      buffer.forall(x => {
+    //        val p1 = if (x._1 == p) x._2 else x._1
+    //        val p2 = if (pair._1 == p) pair._2 else pair._1
+    //        lines.contains((p1, p2)) || lines.contains((p2, p1))
+    //      })
+    //    }
+    //
+    //    def bigBasketsCount(pair: Int): Int = {
+    //      val baskets = scala.collection.mutable.ArrayBuffer.empty[ArrayBuffer[(Int, Int)]]
+    //      lines.filter(x => x._1 == pair || x._2 == pair).foreach {
+    //        t =>
+    //          val basket: Option[ArrayBuffer[(Int, Int)]] = baskets.find(fitsToBasket(_, t, pair))
+    //          if (basket.isDefined) {
+    //            basket.get += t
+    //          } else {
+    //            val buffer: ArrayBuffer[(Int, Int)] = scala.collection.mutable.ArrayBuffer.empty[(Int, Int)]
+    //            baskets += buffer
+    //            buffer += t
+    //          }
+    //      }
+    //      baskets.count(b => b.size >= 10)
+    //    }
+    //
+    //    val bigBaskets: Seq[(Int, Int)] = indices.filter(i => counts(i) > 1200).map(i => (bigBasketsCount(i), i)).seq
+    //    println(s"Big baskets computed for ${bigBaskets.size} pairs")
+    //
+    //    val sortedBaskets = bigBaskets.sortBy(-_._1)
+    //    sortedBaskets.take(100).foreach(p => {
+    //      println(s"Pair with index ${p._2} has ${p._1} baskets and ${counts(p._2)} lines and dist: ${pairDist(p._2)}")
+    //    })
+
+
+    //    val triangles = indices.take(10000).flatMap {
+    //      a: Int => {
+    //        val candidates = (a + 1 until correlationPairs.size).filter(isGoodPair(a, _))
+    //
+    //        val buffer = scala.collection.mutable.ArrayBuffer.empty[(Int, Int, Int)]
+    //
+    //        for (bi <- candidates.indices; ci <- bi + 1 until candidates.size) {
+    //          val b = candidates(bi)
+    //          val c = candidates(ci)
+    //          if (isGoodPair(b, c)) {
+    //            buffer += ((a, b, c))
+    //          }
+    //        }
+    //
+    //        buffer
+    //      }
+    //    }
+
+  }
+
+
+  def findMaxCorrelationPairs(first: Surface, second: Surface, pairsCount: Int = 50000): Seq[(Int, Int, Double)] = {
     def spinImageStack(surface: Surface): IndexedSeq[(Int, SpinImage)] = ((0 until surface.points.length).par map {
       i => (i, SpinImage.compute(i, surface, 6.0, 1.0))
     }).toIndexedSeq
@@ -260,18 +381,18 @@ object SpinImageTest {
 
     val highCorrelationPairs = secondStackGrouped.par flatMap {
       group: IndexedSeq[(Int, SpinImage)] => {
-        val buffer = scala.collection.mutable.ArrayBuffer.empty[(Int, Int, Double)]
+        val buffer = mutable.ArrayBuffer.empty[(Int, Int, Double)]
         for (a <- group; b <- firstStack) {
           //          val lip = Math.abs(first.lipophilicPotentials(b._1) - second.lipophilicPotentials(a._1))
-          val pot = Math.abs(first.electrostaticPotentials(b._1) + second.electrostaticPotentials(a._1))
+          //          val pot = Math.abs(first.electrostaticPotentials(b._1) + second.electrostaticPotentials(a._1))
           //          val lp: Double = (0.5 - pot / 200.0) + (0.5 - lip / 200.0)
-          val lp: Double = (0.5 - pot / 200.0)
-          if (!lp.isNaN) {
-            val correlation = a._2 correlation b._2
-            if (correlation > 0.8) {
-              buffer += ((b._1, a._1, correlation + lp))
-            }
+          //          val lp: Double = (0.5 - pot / 200.0)
+          //          if (lp > 0.8) {
+          val correlation = a._2 correlation b._2
+          if (correlation > 0.8) {
+            buffer += ((b._1, a._1, correlation))
           }
+          //          }
         }
         buffer
       }
@@ -279,12 +400,56 @@ object SpinImageTest {
 
     println(s"Correlation pairs computed. Total size: ${highCorrelationPairs.size}")
 
-    (highCorrelationPairs.seq.sortBy(_._3) reverse) take 40000
+    highCorrelationPairs.seq.sortBy(-_._3) take pairsCount
+  }
+
+  def drawLipHistogram(first: Surface, second: Surface) {
+    def corr(a: Double, b: Double): Double = -Math.log(Math.abs(a - b))
+
+    val max = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield corr(a, b)).max
+    val min = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield corr(a, b)).min
+    val binCount = 100000
+    val binSize = (max - min) / (binCount - 1)
+
+    println(s"Min $min Max $max")
+    println(s"Bin count $binCount Bin size $binSize")
+
+    val bins: Array[Int] = Array.ofDim(binCount)
+
+    for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) {
+      bins(Math.round((corr(a, b) - min) / binSize).toInt) += 1
+    }
+
+    val data = bins.zipWithIndex.map(bin => (bin._2, bin._1)).toIterable
+    val chart = XYLineChart(data, title = "Lipophilicity histogram")
+    chart.show()
+  }
+
+  def drawElHistogram(first: Surface, second: Surface) {
+    def corr(a: Double, b: Double): Double = -Math.log(Math.abs(a + b))
+
+    val max = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield corr(a, b)).filterNot(_.isInfinity).max
+    val min = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield corr(a, b)).filterNot(_.isInfinity).min
+    val binCount = 100000
+    val binSize = (max - min) / (binCount - 1)
+
+    println(s"Min $min Max $max")
+    println(s"Bin count $binCount Bin size $binSize")
+
+    val bins: Array[Int] = Array.ofDim(binCount)
+
+    for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) {
+      bins(Math.max(Math.round((corr(a, b) - min) / binSize).toInt, 0)) += 1
+    }
+
+    val data = bins.zipWithIndex.map(bin => (bin._2, bin._1)).toIterable
+    val chart = XYLineChart(data, title = "Electricity histogram")
+    chart.show()
   }
 
   def printSurfaceStats(first: Surface, second: Surface) {
 
-    val firstPoints = for (a <- first.points.indices.iterator; b <- second.points.indices.iterator) yield first.points(a) distance first.points(b)
+    val firstPoints = for (a <- first.points.indices.iterator; b <- first.points.indices.iterator) yield first.points(a) distance first.points(b)
     println(s"Diameter of first protein: ${firstPoints.max}")
 
     val secondPoints = for (a <- second.points.indices.iterator; b <- second.points.indices.iterator) yield second.points(a) distance second.points(b)
@@ -292,15 +457,34 @@ object SpinImageTest {
 
     val points = for (a <- first.points.indices.iterator; b <- second.points.indices.iterator) yield (a, b, first.points(a) distance second.points(b))
 
-    val closePairs = points.filter(_._3 < 1.0).toArray
+    val closePairs = points.filter(_._3 < 1.0).toSeq
 
-    val pairPairs = for (a <- closePairs; b <- closePairs) yield (first.points(a._1) distance first.points(b._1), second.points(a._2) distance second.points(b._2))
-    println(s"Contact surface diameter ${pairPairs.maxBy(i => Math.max(i._1, i._2))}")
+    val pairPairs = for (a <- closePairs; b <- closePairs) yield Math.max(first.points(a._1) distance first.points(b._1), second.points(a._2) distance second.points(b._2))
+    println(s"Contact surface diameter ${pairPairs.max}")
 
+    val maxLipDiff = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b)).max
+    val maxElDiff = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b)).max
+
+    println(s"Max lip diff $maxLipDiff")
+    println(s"Max el diff $maxElDiff")
+
+    val pairsCount: Int = first.points.length * second.points.length
+
+    val averageLip = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b) / maxLipDiff).sum / pairsCount
+    println(s"Average lip correlation: $averageLip")
+
+    val medianLip = (for (a <- first.lipophilicPotentials; b <- second.lipophilicPotentials) yield Math.abs(a - b) / maxLipDiff).sorted
+    println(s"Median lip correlation: ${medianLip(medianLip.size / 2)}")
+
+    val averageEl = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b) / maxElDiff).sum / pairsCount
+    println(s"Average el correlation: $averageEl")
+
+    val medianEl = (for (a <- first.electrostaticPotentials; b <- second.electrostaticPotentials) yield Math.abs(a + b) / maxElDiff).sorted
+    println(s"Median el correlation: ${medianEl(medianEl.size / 2)}")
   }
 
   def printContactPointsStats(first: Surface, second: Surface) {
-    val spinImageBound: Double = 7.0
+    val spinImageBound: Double = 6.0
     println(s"Spin image bound $spinImageBound")
 
     def spinImageStack(surface: Surface): IndexedSeq[(Int, SpinImage)] = ((0 until surface.points.length).par map {
@@ -314,16 +498,34 @@ object SpinImageTest {
 
     val secondStackGrouped = secondStack.grouped(secondStack.size / 1024).toSeq
 
+    val maxLipDiff = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b)).max
+    val maxElDiff = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b)).max
+
+    val minLipDiff = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b)).min
+    val minElDiff = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b)).min
+
+    println(s"Common lipophilicity delta is in [$minLipDiff; $maxLipDiff]")
+    println(s"Common electricity delta is in [$minElDiff; $maxElDiff]")
+
+    val pairsCount: Int = first.points.length * second.points.length
+    val averageLip = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b)).sum / pairsCount
+    val averageEl = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b)).sum / pairsCount
+
+    println(s"Average lipophilicity delta is $averageLip")
+    println(s"Average electricity delta is $averageEl")
+
     val data = secondStackGrouped.par flatMap {
       group: IndexedSeq[(Int, SpinImage)] => {
-        val buffer = scala.collection.mutable.ArrayBuffer.empty[(Double, Double, Double, Double)]
+        val buffer = mutable.ArrayBuffer.empty[(Double, Double, Double, Double)]
         for (a <- group; b <- firstStack) {
           val lip = Math.abs(first.lipophilicPotentials(b._1) - second.lipophilicPotentials(a._1))
           val pot = Math.abs(first.electrostaticPotentials(b._1) + second.electrostaticPotentials(a._1))
           val correlation = a._2 correlation b._2
           val distance = first.points(b._1) distance second.points(a._1)
 
-          buffer += ((distance, lip, pot, correlation))
+          if (distance < 1.0 || correlation > 0.8) {
+            buffer += ((distance, lip, pot, correlation))
+          }
         }
         buffer
       }
@@ -331,38 +533,36 @@ object SpinImageTest {
 
     println(s"Total points count ${data.size}")
 
-    val maxLipDiff = getMaxLipDifference(first, second)
-    val maxElDiff = getMaxElDifference(first, second)
+    println(s"Minimum distance ${data.minBy(_._1)}")
 
-    println(s"Max lip diff $maxLipDiff")
-    println(s"Max el diff $maxElDiff")
+    val closestPoints: ParSeq[(Double, Double, Double, Double)] = data.filter(_._1 < 1.0)
+
+    println(s"Closest points count with dist < 1: ${closestPoints.size}")
+
+    val closeMaxLipDelta = closestPoints.map(_._2).max
+    val closeMaxElDelta = closestPoints.map(_._3).max
+
+    val closeMinLipDelta = closestPoints.map(_._2).min
+    val closeMinElDelta = closestPoints.map(_._3).min
+
+    println(s"Contact points lipophilicity delta is in [$closeMinLipDelta; $closeMaxLipDelta]")
+    println(s"Contact points electricity delta is in [$closeMinElDelta; $closeMaxElDelta]")
+
+    val closestAverageLip: Double = closestPoints.map(_._2).sum / closestPoints.length
+    val closestAverageEl: Double = closestPoints.map(_._3).sum / closestPoints.length
+
+    println(s"Average contact points lipophilicity delta is $closestAverageLip")
+    println(s"Average contact points electricity delta is $closestAverageEl")
+
 
     def complexCorrelation(data: (Double, Double, Double, Double)): Double = {
       data._4 + 0.5 * (1 - data._2 / maxLipDiff) + 0.5 * (1 - data._3 / maxElDiff)
     }
-    def partialComplexCorrelation(data: (Double, Double, Double, Double)): Double = {
-      0.5 * (1 - data._2 / maxLipDiff) + 0.5 * (1 - data._3 / maxElDiff)
-    }
 
+    val sortedByCorrelation: Seq[(Double, Double, Double, Double)] = data.seq.sortBy(-_._4)
+    val topCandidates: Seq[((Double, Double, Double, Double), Int)] = sortedByCorrelation.zipWithIndex.filter(p => p._1._1 < 1.0)
+    topCandidates.foreach(p => println(s"Position ${p._2} data ${p._1} correlation ${p._1._4}"))
 
-    println(s"Minimum distance ${data.minBy(_._1)}")
-    println(s"Closest points count with dist < 1: ${data.count(_._1 < 1.0)}")
-    println(s"Closest points count with partial correlation > 0.9: ${data.count(partialComplexCorrelation(_) > 0.9)}")
-
-    val sortedByLip: Seq[(Double, Double, Double, Double)] = data.seq.sortBy(-complexCorrelation(_))
-    val topCandidates: Seq[((Double, Double, Double, Double), Int)] = sortedByLip.take(50000).zipWithIndex.filter(p => p._1._1 < 1.0)
-    println(s"Top candidates count: ${topCandidates.size}")
-    topCandidates.foreach(p => println(s"Position ${p._2} data ${p._1} complex correlation ${complexCorrelation(p._1)}"))
-
-
-  }
-
-  def getMaxLipDifference(first: Surface, second: Surface): Double = {
-    (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b)).max
-  }
-
-  def getMaxElDifference(first: Surface, second: Surface): Double = {
-    (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b)).max
   }
 
   def printClosesPointsSimilarity(first: Surface, second: Surface) {
@@ -453,10 +653,6 @@ object SpinImageTest {
       Math.abs(firstDist - secondDist)
     }
 
-    def isGoodTriple(firstIndex: Int, secondIndex: Int, thirdIndex: Int): Boolean = {
-      isGoodPair(firstIndex, secondIndex) && isGoodPair(firstIndex, thirdIndex) && isGoodPair(secondIndex, thirdIndex)
-    }
-
     val lines = maxSimClosesPoints.indices.flatMap {
       a: Int => {
         (a + 1 until maxSimClosesPoints.indices.size).filter(isGoodPair(a, _)).map(x => (a, x))
@@ -498,19 +694,19 @@ object SpinImageTest {
     val maxPair: Int = counts.indexOf(counts.max)
     println(s"Max pair index: $maxPair")
 
-    val baskets = scala.collection.mutable.ArrayBuffer.empty[ArrayBuffer[(Int, Int)]]
+    val baskets = mutable.ArrayBuffer.empty[mutable.ArrayBuffer[(Int, Int)]]
 
-    def fitsToBasket(buffer: ArrayBuffer[(Int, Int)], pair: (Int, Int)): Boolean = {
+    def fitsToBasket(buffer: mutable.ArrayBuffer[(Int, Int)], pair: (Int, Int)): Boolean = {
       buffer.forall(x => lines.contains((x._2, pair._2)) || lines.contains((pair._2, x._2)))
     }
 
     lines.filter(x => x._1 == maxPair).foreach {
       case (p, x) =>
-        val basket: Option[ArrayBuffer[(Int, Int)]] = baskets.find(fitsToBasket(_, (p, x)))
+        val basket: Option[mutable.ArrayBuffer[(Int, Int)]] = baskets.find(fitsToBasket(_, (p, x)))
         if (basket.isDefined) {
           basket.get += ((p, x))
         } else {
-          val buffer: ArrayBuffer[(Int, Int)] = scala.collection.mutable.ArrayBuffer.empty[(Int, Int)]
+          val buffer: mutable.ArrayBuffer[(Int, Int)] = mutable.ArrayBuffer.empty[(Int, Int)]
           baskets += buffer
           buffer += ((p, x))
         }
@@ -518,11 +714,11 @@ object SpinImageTest {
 
     lines.filter(x => x._2 == maxPair).foreach {
       case (x, p) =>
-        val basket: Option[ArrayBuffer[(Int, Int)]] = baskets.find(fitsToBasket(_, (p, x)))
+        val basket: Option[mutable.ArrayBuffer[(Int, Int)]] = baskets.find(fitsToBasket(_, (p, x)))
         if (basket.isDefined) {
           basket.get += ((p, x))
         } else {
-          val buffer: ArrayBuffer[(Int, Int)] = scala.collection.mutable.ArrayBuffer.empty[(Int, Int)]
+          val buffer: mutable.ArrayBuffer[(Int, Int)] = mutable.ArrayBuffer.empty[(Int, Int)]
           baskets += buffer
           buffer += ((p, x))
         }
@@ -534,82 +730,6 @@ object SpinImageTest {
     }
     println(s"Total elements in baskets: $bs")
     baskets.foreach(b => println(s"Basket: ${b.size}"))
-
-    //    val triangles = scala.collection.mutable.ArrayBuffer.empty[(Int, Int, Int)]
-    //    for (a <- maxSimClosesPoints.indices; b <- a + 1 until maxSimClosesPoints.size) {
-    //      if (isGoodPair(a, b)) {
-    //        for (c <- b + 1 until maxSimClosesPoints.size) {
-    //          if (isGoodTriple(a, b, c)) {
-    //            triangles += ((a, b, c))
-    //          }
-    //        }
-    //      }
-    //    }
-    //
-    //    println(s"Triangles: ${triangles.size}")
-    //
-    //    def pairDist(pairIndex: Int) = {
-    //      val pair = maxSimClosesPoints(pairIndex)
-    //      first.points(pair._1) distance second.points(pair._2)
-    //    }
-    //
-    //    val minTriangle = triangles minBy {
-    //      case (a, b, c) => pairDist(a) + pairDist(b) + pairDist(c)
-    //    }
-    //
-    //    val maxCorrTriangle = triangles maxBy {
-    //      case (a, b, c) => maxSimClosesPoints(a)._4 + maxSimClosesPoints(b)._4 + maxSimClosesPoints(c)._4
-    //    }
-    //
-    //    def triangleLength(triangle: (Int, Int, Int)) = {
-    //      val firstPair = maxSimClosesPoints(triangle._1)
-    //      val secondPair = maxSimClosesPoints(triangle._2)
-    //      val thirdPair = maxSimClosesPoints(triangle._3)
-    //
-    //      val firstDist = first.points(firstPair._1) distance first.points(secondPair._1)
-    //      val secondDist = first.points(secondPair._1) distance first.points(thirdPair._1)
-    //      val thirdDist = first.points(firstPair._1) distance first.points(thirdPair._1)
-    //      (firstDist, secondDist, thirdDist)
-    //    }
-    //
-    //    println(s"Triangle with min distance has distances: ${pairDist(minTriangle._1)} ${pairDist(minTriangle._2)} ${pairDist(minTriangle._3)}")
-    //    println(s"Triangle with min distance has correlations: ${maxSimClosesPoints(minTriangle._1)._4} ${maxSimClosesPoints(minTriangle._2)._4} ${maxSimClosesPoints(minTriangle._3)._4}")
-    //    println(s"Triangle with min distance has measures: ${triangleLength(minTriangle)}")
-    //    println(s"Triangle with min distance has lipophilicity: [${first.lipophilicPotentials(maxSimClosesPoints(minTriangle._1)._1)} " +
-    //      s"${second.lipophilicPotentials(maxSimClosesPoints(minTriangle._1)._2)}] " +
-    //      s"[${first.lipophilicPotentials(maxSimClosesPoints(minTriangle._2)._1)} " +
-    //      s"${second.lipophilicPotentials(maxSimClosesPoints(minTriangle._2)._2)}] " +
-    //      s"[${first.lipophilicPotentials(maxSimClosesPoints(minTriangle._3)._1)} " +
-    //      s"${second.lipophilicPotentials(maxSimClosesPoints(minTriangle._3)._2)}]")
-    //    println(s"Triangle with min distance has electrostatic: [${first.electrostaticPotentials(maxSimClosesPoints(minTriangle._1)._1)} " +
-    //      s"${second.electrostaticPotentials(maxSimClosesPoints(minTriangle._1)._2)}] " +
-    //      s"[${first.electrostaticPotentials(maxSimClosesPoints(minTriangle._2)._1)} " +
-    //      s"${second.electrostaticPotentials(maxSimClosesPoints(minTriangle._2)._2)}] " +
-    //      s"[${first.electrostaticPotentials(maxSimClosesPoints(minTriangle._3)._1)} " +
-    //      s"${second.electrostaticPotentials(maxSimClosesPoints(minTriangle._3)._2)}]")
-    //    println(s"Triangle with max corr has distances: ${pairDist(maxCorrTriangle._1)} ${pairDist(maxCorrTriangle._2)} ${pairDist(maxCorrTriangle._3)}")
-    //    println(s"Triangle with max corr has correlations: ${maxSimClosesPoints(maxCorrTriangle._1)._4} ${maxSimClosesPoints(maxCorrTriangle._2)._4} ${maxSimClosesPoints(maxCorrTriangle._3)._4}")
-    //    println(s"Triangle with max corr has measures: ${triangleLength(maxCorrTriangle)}")
-    //    println(s"Triangle with max corr has lipophilicity: [${first.lipophilicPotentials(maxSimClosesPoints(maxCorrTriangle._1)._1)} " +
-    //      s"${second.lipophilicPotentials(maxSimClosesPoints(maxCorrTriangle._1)._2)}] " +
-    //      s"[${first.lipophilicPotentials(maxSimClosesPoints(maxCorrTriangle._2)._1)} " +
-    //      s"${second.lipophilicPotentials(maxSimClosesPoints(maxCorrTriangle._2)._2)}] " +
-    //      s"[${first.lipophilicPotentials(maxSimClosesPoints(maxCorrTriangle._3)._1)} " +
-    //      s"${second.lipophilicPotentials(maxSimClosesPoints(maxCorrTriangle._3)._2)}]")
-    //    println(s"Triangle with max corr has electrostatic: [${first.electrostaticPotentials(maxSimClosesPoints(maxCorrTriangle._1)._1)} " +
-    //      s"${second.electrostaticPotentials(maxSimClosesPoints(maxCorrTriangle._1)._2)}] " +
-    //      s"[${first.electrostaticPotentials(maxSimClosesPoints(maxCorrTriangle._2)._1)} " +
-    //      s"${second.electrostaticPotentials(maxSimClosesPoints(maxCorrTriangle._2)._2)}] " +
-    //      s"[${first.electrostaticPotentials(maxSimClosesPoints(maxCorrTriangle._3)._1)} " +
-    //      s"${first.electrostaticPotentials(maxSimClosesPoints(maxCorrTriangle._3)._2)}]")
-    //
-
-    //    closesPoints foreach {
-    //      case (a, b, dist) =>
-    //        println(s"Points ${first.points(a)} and ${second.points(b)} with distance $dist have similarity ${firstStack(a) similarity secondStack(b)}")
-    //        println(s"First image ${firstStack(a)}")
-    //        println(s"Second image ${secondStack(b)}")
-    //    }
 
   }
 

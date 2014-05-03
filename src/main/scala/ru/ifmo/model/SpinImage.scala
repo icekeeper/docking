@@ -21,9 +21,6 @@ class SpinImage(geometry: Array[Array[Double]], electricity: Array[Array[Double]
 
   def similarity(that: SpinImage): Double = {
     val geometryCorrelation: (Long, Double) = SpinImage.correlation(this.geometryBins, that.geometryBins)
-    val electricityCorrelation: Double = SpinImage.correlation(this.electricityBins, that.electricityBins, -1)._2
-    val lipophilicityCorrelation: Double = SpinImage.correlation(this.lipophilicityBins, that.lipophilicityBins)._2
-
     val c = geometryCorrelation._2
 
     if (geometryCorrelation._1 < 4) 0 else FastMath.pow(FastMath.atanh(c), 2) - 3 * (1 / (geometryCorrelation._1 - 3))
