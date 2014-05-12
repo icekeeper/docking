@@ -23,9 +23,9 @@ object SpinImageTest {
     //    printClosesPointsSimilarity(first, second)
     //    printMaxSimilarity(first, second)
     //    printPLYFiles(first, second)
-    //    printContactPointsStats(first, second)
+    printContactPointsStats(first, second)
     //    printSurfaceStats(first, second)
-    searchDockingSolutions(first, second)
+    //    searchDockingSolutions(first, second)
     //    drawLipHistogram(first, second)
     //    drawElHistogram(first, second)
   }
@@ -296,9 +296,11 @@ object SpinImageTest {
         if (x.isEmpty && r.size >= 3) List(r) else List.empty
       } else {
         val pivot: Int = (p.iterator ++ x.iterator).maxBy(u => (p & linesData(u)).size)
-        val candidates = (p -- linesData(pivot)).toSeq.par
-        candidates.zipWithIndex.flatMap {
-          case (v, i) => tomita(r + v, p -- candidates.slice(0, i), x ++ candidates.slice(0, i))
+        val candidates = (p -- linesData(pivot)).toSeq
+        candidates.par.zipWithIndex.flatMap {
+          case (v, i) =>
+            val processed = candidates.view.slice(0, i)
+            tomita(r + v, (p -- processed) & linesData(v), (x ++ processed) & linesData(v))
         }.seq
       }
     }

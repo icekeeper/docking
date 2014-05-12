@@ -1,7 +1,8 @@
-package ru.ifmo.docking.lip;
+package ru.ifmo.docking.calculations;
 
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
+import ru.ifmo.docking.util.IOUtils;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -17,6 +18,7 @@ import java.util.stream.Collectors;
  * Based on pyMLP script written by Julien Lefeuvre <lefeuvrejulien@yahoo.fr>
  * https://code.google.com/p/pymlp
  */
+
 public class LipophilicityCalculator {
     private final Collection<Atom> atomsData;
 
@@ -27,26 +29,22 @@ public class LipophilicityCalculator {
     }
 
     private static Collection<Atom> readPdbFile(File pdbFile, Map<String, Double> fiData) {
-        try (BufferedReader reader = new BufferedReader(new FileReader(pdbFile))) {
-            return reader.lines()
-                    .filter(line -> line.startsWith("ATOM  ") || line.startsWith("HETATM"))
-                    .map(line -> {
-                        String atomName = line.substring(12, 16).trim();
-                        String resName = line.substring(17, 20).trim();
-                        double atomX = Double.parseDouble(line.substring(30, 38).trim());
-                        double atomY = Double.parseDouble(line.substring(38, 46).trim());
-                        double atomZ = Double.parseDouble(line.substring(46, 54).trim());
+        return IOUtils.readLines(pdbFile)
+                .filter(line -> line.startsWith("ATOM  ") || line.startsWith("HETATM"))
+                .map(line -> {
+                    String atomName = line.substring(12, 16).trim();
+                    String resName = line.substring(17, 20).trim();
+                    double atomX = Double.parseDouble(line.substring(30, 38).trim());
+                    double atomY = Double.parseDouble(line.substring(38, 46).trim());
+                    double atomZ = Double.parseDouble(line.substring(46, 54).trim());
 
-                        String fiKey = resName + "_" + atomName;
-                        double fi = fiData.containsKey(fiKey) ? fiData.get(fiKey) : Double.NaN;
+                    String fiKey = resName + "_" + atomName;
+                    double fi = fiData.containsKey(fiKey) ? fiData.get(fiKey) : Double.NaN;
 
-                        return new Atom(atomX, atomY, atomZ, fi);
-                    })
-                    .filter(atom -> !Double.isNaN(atom.fi))
-                    .collect(Collectors.toList());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+                    return new Atom(atomX, atomY, atomZ, fi);
+                })
+                .filter(atom -> !Double.isNaN(atom.fi))
+                .collect(Collectors.toList());
     }
 
     private static Map<String, Double> readFiFile(File fiFile) {

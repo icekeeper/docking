@@ -2,7 +2,7 @@ package ru.ifmo.model
 
 import java.io.File
 import scala.io.Source
-import ru.ifmo.docking.lip.LipophilicityCalculator
+import ru.ifmo.docking.calculations.LipophilicityCalculator
 import ru.ifmo.docking.geometry
 
 class Surface(

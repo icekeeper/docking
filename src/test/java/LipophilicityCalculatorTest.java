@@ -1,6 +1,6 @@
 import org.junit.Test;
+import ru.ifmo.docking.calculations.LipophilicityCalculator;
 import ru.ifmo.docking.geometry.Point;
-import ru.ifmo.docking.lip.LipophilicityCalculator;
 
 import java.io.BufferedReader;
 import java.io.File;
