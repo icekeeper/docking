@@ -5,7 +5,9 @@ import com.google.common.collect.Sets;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.model.SpinImage;
 import ru.ifmo.docking.model.Surface;
+import ru.ifmo.docking.util.PlyWriter;
 
+import java.io.File;
 import java.util.*;
 import java.util.concurrent.ForkJoinPool;
 import java.util.function.Function;
@@ -22,7 +24,7 @@ public class Docker {
         start = System.currentTimeMillis();
         List<PointMatch> pointMatches = findTopCorrelatedPairs(50000, 0.8);
         System.out.println((System.currentTimeMillis() - start) + " Point matched. Smallest correlation is " + pointMatches.get(pointMatches.size() - 1).correlation);
-
+        System.out.println("Close points in first 50000 correlated pairs:");
         pointMatches.stream().filter(match ->
                 Geometry.distance(
                         firstSurface.points.get(match.firstPointIndex),
@@ -55,7 +57,8 @@ public class Docker {
                 .collect(Collectors.toList());
 
         System.out.println((System.currentTimeMillis() - start) + " Contact cliques count: " + contactCliques.size());
-        for (List<PointMatch> contactClique : contactCliques) {
+        for (int i = 0; i < contactCliques.size(); i++) {
+            List<PointMatch> contactClique = contactCliques.get(i);
             System.out.println("------start-----");
             contactClique.forEach(match -> {
                         System.out.println(String.format("%s distance=%f", match, Geometry.distance(
@@ -65,6 +68,7 @@ public class Docker {
                     }
             );
             System.out.println("------end-----");
+            writeSurfacesWithCliques(contactClique, i + 1, "close");
         }
 
         Map<Integer, List<List<PointMatch>>> grouped = cliques.stream().collect(Collectors.groupingBy(List::size));
@@ -72,6 +76,44 @@ public class Docker {
         Collections.sort(keys);
         keys.forEach(key -> System.out.println("Bins of size " + key + ": " + grouped.get(key).size()));
 
+        List<List<PointMatch>> maxCliques = grouped.get(maxClique.size());
+        for (int i = 0; i < maxCliques.size(); i++) {
+            List<PointMatch> clique = maxCliques.get(i);
+            writeSurfacesWithCliques(clique, i + 1, "max");
+        }
+    }
+
+    private void writeSurfacesWithCliques(List<PointMatch> clique, int num, String prefix) {
+        List<String> comments = Lists.newArrayList();
+        comments.add("clique №" + num);
+        comments.addAll(
+                clique.stream().map(pointMatch -> String.format("%s distance=%f", pointMatch, Geometry.distance(
+                        firstSurface.points.get(pointMatch.firstPointIndex),
+                        secondSurface.points.get(pointMatch.secondPointIndex)
+                ))).collect(Collectors.toList())
+        );
+
+        Set<Integer> firstPoints = clique.stream().map(match -> match.firstPointIndex).collect(Collectors.toSet());
+        Set<Integer> secondPoints = clique.stream().map(match -> match.secondPointIndex).collect(Collectors.toSet());
+
+        String firstName = prefix + "_clique_" + num + "_" + firstSurface.name + ".ply";
+        String secondName = prefix + "_clique_" + num + "_" + secondSurface.name + ".ply";
+
+        writeSurface(firstSurface, firstPoints, new int[]{255, 100, 100}, comments, firstName);
+        writeSurface(secondSurface, secondPoints, new int[]{100, 100, 255}, comments, secondName);
+    }
+
+    private void writeSurface(Surface surface, Set<Integer> pointIndices, int[] otherColor, Collection<String> comments, String fileName) {
+        File file = new File(fileName);
+        int[] blackColor = {124, 124, 124};
+        List<int[]> colors = IntStream.range(0, surface.points.size()).mapToObj(i -> {
+            if (pointIndices.contains(i)) {
+                return otherColor;
+            } else {
+                return blackColor;
+            }
+        }).collect(Collectors.toList());
+        PlyWriter.writeAsPlyFile(surface, colors, file, comments);
     }
 
     private List<List<PointMatch>> findCliques(Map<PointMatch, Set<PointMatch>> graph, Set<PointMatch> startSet) {
@@ -137,7 +179,7 @@ public class Docker {
         double firstDotProduct = firstSurface.normals.get(first.firstPointIndex).dot(firstSurface.normals.get(second.firstPointIndex));
         double secondDotProduct = secondSurface.normals.get(first.secondPointIndex).dot(secondSurface.normals.get(second.secondPointIndex));
 
-        return delta < 1.0
+        return delta < 1
                 && first.firstPointIndex != second.secondPointIndex
                 && first.secondPointIndex != second.secondPointIndex
                 && firstDotProduct > 0

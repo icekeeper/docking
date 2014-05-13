@@ -1,7 +1,9 @@
 package ru.ifmo
 
 import org.scalatest.{Matchers, FlatSpec}
-import ru.ifmo.model.{Point, GeometryTools, Matrix, Vector}
+import ru.ifmo.model.GeometryTools
+import ru.ifmo.docking.geometry.{Point, Vector}
+import ru.ifmo.docking.model.Matrix
 
 class TriangleTransformTest extends FlatSpec with Matchers {
 

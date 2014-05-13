@@ -1,11 +1,14 @@
 package ru.ifmo.main
 
 import java.io.{PrintWriter, File}
-import ru.ifmo.model._
 import scala.collection.mutable
 import scalax.chart.api._
 import scala.io.Source
 import scala.collection.parallel.ParSeq
+import ru.ifmo.docking.model.{Matrix, SpinImage, Surface}
+import ru.ifmo.model.GeometryTools
+import scala.collection.JavaConversions._
+import ru.ifmo.docking.geometry.Point
 
 object SpinImageTest {
 
@@ -14,10 +17,23 @@ object SpinImageTest {
     val secondDir = s"data/${args(1)}_data"
 
     val fiPotentials: File = new File("data", "fi_potentials.txt")
-    val first = Surface.read(new File(firstDir, s"${args(0)}.obj"), new File(firstDir, s"${args(0)}_pot.csv"), fiPotentials, new File(firstDir, s"${args(0)}.pdb"))
-    println(s"First surface read with ${first.points.length} points")
-    val second = Surface.read(new File(secondDir, s"${args(1)}.obj"), new File(secondDir, s"${args(1)}_pot.csv"), fiPotentials, new File(secondDir, s"${args(1)}.pdb"))
-    println(s"Second surface read with ${second.points.length} points")
+    val first = Surface.read(
+      args(0),
+      new File(firstDir, s"${args(0)}.pdb"),
+      new File(firstDir, s"${args(0)}.obj"),
+      new File(firstDir, s"${args(0)}_pot.csv"),
+      fiPotentials
+    )
+
+    println(s"First surface read with ${first.points.size()} points")
+    val second = Surface.read(
+      args(1),
+      new File(secondDir, s"${args(1)}.pdb"),
+      new File(secondDir, s"${args(1)}.obj"),
+      new File(secondDir, s"${args(1)}_pot.csv"),
+      fiPotentials
+    )
+    println(s"Second surface read with ${second.points.size()} points")
 
     //                printClosesPoints(first, second)
     //    printClosesPointsSimilarity(first, second)
@@ -33,8 +49,8 @@ object SpinImageTest {
   def printPLYFiles(first: Surface, second: Surface) {
     val correlationPairs = findMaxCorrelationPairs(first, second)
 
-    val firstColors: Seq[(Int, Int, Int)] = first.points.indices.map(i => if (correlationPairs.exists(p => p._1 == i)) (255, 0, 0) else (0, 0, 0))
-    val secondColors: Seq[(Int, Int, Int)] = second.points.indices.map(i => if (correlationPairs.exists(p => p._2 == i)) (255, 0, 0) else (0, 0, 0))
+    val firstColors: Seq[(Int, Int, Int)] = (0 until first.points.size()).map(i => if (correlationPairs.exists(p => p._1 == i)) (255, 0, 0) else (0, 0, 0))
+    val secondColors: Seq[(Int, Int, Int)] = (0 until second.points.size()).map(i => if (correlationPairs.exists(p => p._2 == i)) (255, 0, 0) else (0, 0, 0))
 
     printSurfaceAsPLY(first, firstColors, new File("first.ply"))
     printSurfaceAsPLY(second, secondColors, new File("second.ply"))
@@ -48,24 +64,24 @@ object SpinImageTest {
 
     def pairDist(pairIndex: Int): Double = {
       val pair = correlationPairs(pairIndex)
-      first.points(pair._1) distance second.points(pair._2)
+      first.points.get(pair._1) distance second.points.get(pair._2)
     }
 
     def pointDist(firstIndex: Int, secondIndex: Int): Double = {
       val firstPair = correlationPairs(firstIndex)
       val secondPair = correlationPairs(secondIndex)
-      second.points(firstPair._2) distance second.points(secondPair._2)
+      second.points.get(firstPair._2) distance second.points.get(secondPair._2)
     }
 
     def isGoodPair(firstIndex: Int, secondIndex: Int) = {
       val firstPair = correlationPairs(firstIndex)
       val secondPair = correlationPairs(secondIndex)
-      val firstDist = first.points(firstPair._1) distance first.points(secondPair._1)
-      val secondDist = second.points(firstPair._2) distance second.points(secondPair._2)
+      val firstDist = first.points.get(firstPair._1) distance first.points.get(secondPair._1)
+      val secondDist = second.points.get(firstPair._2) distance second.points.get(secondPair._2)
       val delta: Double = Math.abs(firstDist - secondDist)
 
-      val firstDotProduct = first.normals(firstPair._1) dot first.normals(secondPair._1)
-      val secondDotProduct = second.normals(firstPair._2) dot second.normals(secondPair._2)
+      val firstDotProduct = first.normals.get(firstPair._1) dot first.normals.get(secondPair._1)
+      val secondDotProduct = second.normals.get(firstPair._2) dot second.normals.get(secondPair._2)
 
       (firstPair._1 != secondPair._1
         && firstPair._2 != secondPair._2
@@ -259,8 +275,8 @@ object SpinImageTest {
     val correlatedPairs = findMaxCorrelationPairs(first, second, pairsCount = 50000)
     println(s"[$time] Correlation bound: ${correlatedPairs.last._3}")
 
-    val firstDiameter = (for (a <- first.points.indices.iterator; b <- first.points.indices.iterator) yield first.points(a) distance first.points(b)).max
-    val secondDiameter = (for (a <- second.points.indices.iterator; b <- second.points.indices.iterator) yield second.points(a) distance second.points(b)).max
+    val firstDiameter = first.getDiameter
+    val secondDiameter = second.getDiameter
 
     val contactSurfaceLimit = Math.max(firstDiameter, secondDiameter) * 0.6
     println(s"[$time] First protein max size: $firstDiameter Second protein max size: $secondDiameter Contact surface size limit: $contactSurfaceLimit")
@@ -268,8 +284,8 @@ object SpinImageTest {
     def isGoodPair(firstIndex: Int, secondIndex: Int) = {
       val firstPair = correlatedPairs(firstIndex)
       val secondPair = correlatedPairs(secondIndex)
-      val firstDist = first.points(firstPair._1) distance first.points(secondPair._1)
-      val secondDist = second.points(firstPair._2) distance second.points(secondPair._2)
+      val firstDist = first.points.get(firstPair._1) distance first.points.get(secondPair._1)
+      val secondDist = second.points.get(firstPair._2) distance second.points.get(secondPair._2)
       val delta: Double = Math.abs(firstDist - secondDist)
 
       (firstPair._1 != secondPair._1
@@ -311,7 +327,7 @@ object SpinImageTest {
     println(s"[$time] Max clique size: ${cliques.maxBy(_.size).size}")
     println(s"[$time] Min clique size: ${cliques.minBy(_.size).size}")
 
-    val initialSolutions = cliques.filter(_.forall(x => (first.points(correlatedPairs(x)._1) distance second.points(correlatedPairs(x)._2)) < 1.0))
+    val initialSolutions = cliques.filter(_.forall(x => (first.points.get(correlatedPairs(x)._1) distance second.points.get(correlatedPairs(x)._2)) < 1.0))
     println(s"[$time] Cliquest lead to initial complex count: ${initialSolutions.size}")
     initialSolutions.foreach(c => println(s"[$time] $c"))
 
@@ -370,7 +386,7 @@ object SpinImageTest {
 
 
   def findMaxCorrelationPairs(first: Surface, second: Surface, pairsCount: Int = 50000): Seq[(Int, Int, Double)] = {
-    def spinImageStack(surface: Surface): IndexedSeq[(Int, SpinImage)] = ((0 until surface.points.length).par map {
+    def spinImageStack(surface: Surface): IndexedSeq[(Int, SpinImage)] = ((0 until surface.points.size()).par map {
       i => (i, SpinImage.compute(i, surface, 6.0, 1.0))
     }).toIndexedSeq
 
@@ -385,8 +401,8 @@ object SpinImageTest {
       group: IndexedSeq[(Int, SpinImage)] => {
         val buffer = mutable.ArrayBuffer.empty[(Int, Int, Double)]
         for (a <- group; b <- firstStack) {
-          //          val lip = Math.abs(first.lipophilicPotentials(b._1) - second.lipophilicPotentials(a._1))
-          //          val pot = Math.abs(first.electrostaticPotentials(b._1) + second.electrostaticPotentials(a._1))
+          //          val lip = Math.abs(first.lipophilicity(b._1) - second.lipophilicity(a._1))
+          //          val pot = Math.abs(first.electricity(b._1) + second.electricity(a._1))
           //          val lp: Double = (0.5 - pot / 200.0) + (0.5 - lip / 200.0)
           //          val lp: Double = (0.5 - pot / 200.0)
           //          if (lp > 0.8) {
@@ -408,8 +424,8 @@ object SpinImageTest {
   def drawLipHistogram(first: Surface, second: Surface) {
     def corr(a: Double, b: Double): Double = -Math.log(Math.abs(a - b))
 
-    val max = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield corr(a, b)).max
-    val min = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield corr(a, b)).min
+    val max = (for (a <- first.lipophilicity.iterator; b <- second.lipophilicity.iterator) yield corr(a, b)).max
+    val min = (for (a <- first.lipophilicity.iterator; b <- second.lipophilicity.iterator) yield corr(a, b)).min
     val binCount = 100000
     val binSize = (max - min) / (binCount - 1)
 
@@ -418,7 +434,7 @@ object SpinImageTest {
 
     val bins: Array[Int] = Array.ofDim(binCount)
 
-    for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) {
+    for (a <- first.lipophilicity.iterator(); b <- second.lipophilicity.iterator) {
       bins(Math.round((corr(a, b) - min) / binSize).toInt) += 1
     }
 
@@ -430,8 +446,8 @@ object SpinImageTest {
   def drawElHistogram(first: Surface, second: Surface) {
     def corr(a: Double, b: Double): Double = -Math.log(Math.abs(a + b))
 
-    val max = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield corr(a, b)).filterNot(_.isInfinity).max
-    val min = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield corr(a, b)).filterNot(_.isInfinity).min
+    val max = (for (a <- first.electricity.iterator; b <- second.electricity.iterator) yield corr(a, b)).filterNot(_.isInfinity).max
+    val min = (for (a <- first.electricity.iterator; b <- second.electricity.iterator) yield corr(a, b)).filterNot(_.isInfinity).min
     val binCount = 100000
     val binSize = (max - min) / (binCount - 1)
 
@@ -440,7 +456,7 @@ object SpinImageTest {
 
     val bins: Array[Int] = Array.ofDim(binCount)
 
-    for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) {
+    for (a <- first.electricity.iterator; b <- second.electricity.iterator) {
       bins(Math.max(Math.round((corr(a, b) - min) / binSize).toInt, 0)) += 1
     }
 
@@ -464,24 +480,24 @@ object SpinImageTest {
     val pairPairs = for (a <- closePairs; b <- closePairs) yield Math.max(first.points(a._1) distance first.points(b._1), second.points(a._2) distance second.points(b._2))
     println(s"Contact surface diameter ${pairPairs.max}")
 
-    val maxLipDiff = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b)).max
-    val maxElDiff = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b)).max
+    val maxLipDiff = (for (a <- first.lipophilicity.iterator; b <- second.lipophilicity.iterator) yield Math.abs(a - b)).max
+    val maxElDiff = (for (a <- first.electricity.iterator; b <- second.electricity.iterator) yield Math.abs(a + b)).max
 
     println(s"Max lip diff $maxLipDiff")
     println(s"Max el diff $maxElDiff")
 
     val pairsCount: Int = first.points.length * second.points.length
 
-    val averageLip = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b) / maxLipDiff).sum / pairsCount
+    val averageLip = (for (a <- first.lipophilicity.iterator; b <- second.lipophilicity.iterator) yield Math.abs(a - b) / maxLipDiff).sum / pairsCount
     println(s"Average lip correlation: $averageLip")
 
-    val medianLip = (for (a <- first.lipophilicPotentials; b <- second.lipophilicPotentials) yield Math.abs(a - b) / maxLipDiff).sorted
+    val medianLip = (for (a <- first.lipophilicity; b <- second.lipophilicity) yield Math.abs(a - b) / maxLipDiff).sorted
     println(s"Median lip correlation: ${medianLip(medianLip.size / 2)}")
 
-    val averageEl = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b) / maxElDiff).sum / pairsCount
+    val averageEl = (for (a <- first.electricity.iterator; b <- second.electricity.iterator) yield Math.abs(a + b) / maxElDiff).sum / pairsCount
     println(s"Average el correlation: $averageEl")
 
-    val medianEl = (for (a <- first.electrostaticPotentials; b <- second.electrostaticPotentials) yield Math.abs(a + b) / maxElDiff).sorted
+    val medianEl = (for (a <- first.electricity; b <- second.electricity) yield Math.abs(a + b) / maxElDiff).sorted
     println(s"Median el correlation: ${medianEl(medianEl.size / 2)}")
   }
 
@@ -500,18 +516,18 @@ object SpinImageTest {
 
     val secondStackGrouped = secondStack.grouped(secondStack.size / 1024).toSeq
 
-    val maxLipDiff = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b)).max
-    val maxElDiff = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b)).max
+    val maxLipDiff = (for (a <- first.lipophilicity.iterator; b <- second.lipophilicity.iterator) yield Math.abs(a - b)).max
+    val maxElDiff = (for (a <- first.electricity.iterator; b <- second.electricity.iterator) yield Math.abs(a + b)).max
 
-    val minLipDiff = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b)).min
-    val minElDiff = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b)).min
+    val minLipDiff = (for (a <- first.lipophilicity.iterator; b <- second.lipophilicity.iterator) yield Math.abs(a - b)).min
+    val minElDiff = (for (a <- first.electricity.iterator; b <- second.electricity.iterator) yield Math.abs(a + b)).min
 
     println(s"Common lipophilicity delta is in [$minLipDiff; $maxLipDiff]")
     println(s"Common electricity delta is in [$minElDiff; $maxElDiff]")
 
     val pairsCount: Int = first.points.length * second.points.length
-    val averageLip = (for (a <- first.lipophilicPotentials.iterator; b <- second.lipophilicPotentials.iterator) yield Math.abs(a - b)).sum / pairsCount
-    val averageEl = (for (a <- first.electrostaticPotentials.iterator; b <- second.electrostaticPotentials.iterator) yield Math.abs(a + b)).sum / pairsCount
+    val averageLip = (for (a <- first.lipophilicity.iterator; b <- second.lipophilicity.iterator) yield Math.abs(a - b)).sum / pairsCount
+    val averageEl = (for (a <- first.electricity.iterator; b <- second.electricity.iterator) yield Math.abs(a + b)).sum / pairsCount
 
     println(s"Average lipophilicity delta is $averageLip")
     println(s"Average electricity delta is $averageEl")
@@ -520,8 +536,8 @@ object SpinImageTest {
       group: IndexedSeq[(Int, SpinImage)] => {
         val buffer = mutable.ArrayBuffer.empty[(Double, Double, Double, Double)]
         for (a <- group; b <- firstStack) {
-          val lip = Math.abs(first.lipophilicPotentials(b._1) - second.lipophilicPotentials(a._1))
-          val pot = Math.abs(first.electrostaticPotentials(b._1) + second.electrostaticPotentials(a._1))
+          val lip = Math.abs(first.lipophilicity(b._1) - second.lipophilicity(a._1))
+          val pot = Math.abs(first.electricity(b._1) + second.electricity(a._1))
           val correlation = a._2 correlation b._2
           val distance = first.points(b._1) distance second.points(a._1)
 
@@ -580,7 +596,7 @@ object SpinImageTest {
 
     val points = for (a <- first.points.indices.iterator; b <- second.points.indices.iterator) yield (a, b, first.points(a) distance second.points(b))
 
-    val pointsWithLip = points.map(x => (Math.abs(first.electrostaticPotentials(x._1) + second.electrostaticPotentials(x._2)), x._3)).toSeq
+    val pointsWithLip = points.map(x => (Math.abs(first.electricity(x._1) + second.electricity(x._2)), x._3)).toSeq
 
     println(s"Min lipopholicity potential difference: ${pointsWithLip.minBy(x => x._1)}")
     println(s"Max lipopholicity potential difference: ${pointsWithLip.maxBy(x => x._1)}")
@@ -751,8 +767,8 @@ object SpinImageTest {
     closesPoints foreach {
       case (a, b, dist) =>
         println(s"Points ${first.points(a)} and ${second.points(b)} with distance $dist ")
-        println(s"have electrostatic potentials ${first.electrostaticPotentials(a)}, ${second.electrostaticPotentials(b)}")
-        println(s"have lipophilic potentials ${first.lipophilicPotentials(a)}, ${second.lipophilicPotentials(b)}")
+        println(s"have electrostatic potentials ${first.electricity(a)}, ${second.electricity(b)}")
+        println(s"have lipophilic potentials ${first.lipophilicity(a)}, ${second.lipophilicity(b)}")
     }
   }
 
@@ -774,7 +790,7 @@ object SpinImageTest {
 
   def saveSolutionAsPly(suface: Surface, output: File, matrix: Matrix, triangle: (Int, Int, Int)) {
     val colors = suface.points.indices.map(i => if (triangle.productIterator.contains(i)) (255, 0, 0) else (0, 0, 0))
-    printSurfaceAsPLY(suface.transform(matrix), colors, output)
+    printSurfaceAsPLY(GeometryTools.transform(suface, matrix), colors, output)
   }
 
 
@@ -798,7 +814,7 @@ object SpinImageTest {
     }
 
     surface.faces.foreach {
-      case (a, b, c) => writer.write(s"3 ${a - 1} ${b - 1} ${c - 1}\n")
+      f: Surface.Face => writer.write(s"3 ${f.p1 - 1} ${f.p2 - 1} ${f.p3 - 1}\n")
     }
 
     writer.close()
@@ -823,11 +839,11 @@ object SpinImageTest {
     second.points.foreach(p => writer.write(s"${p.x} ${p.y} ${p.z}\n"))
 
     first.faces.foreach {
-      case (a, b, c) => writer.write(s"3 ${a - 1} ${b - 1} ${c - 1}\n")
+      f: Surface.Face => writer.write(s"3 ${f.p1 - 1} ${f.p2 - 1} ${f.p3 - 1}\n")
     }
 
     second.faces.foreach {
-      case (a, b, c) => writer.write(s"3 ${a - 1 + first.points.size} ${b - 1 + first.points.size} ${c - 1 + first.points.size}\n")
+      f: Surface.Face => writer.write(s"3 ${f.p1 - 1 + first.points.size} ${f.p2 - 1 + first.points.size} ${f.p3 - 1 + first.points.size}\n")
     }
 
     //    val delta = correlationPairs.head._3 - correlationPairs.last._3

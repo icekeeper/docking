@@ -1,3 +1,4 @@
+import org.junit.Ignore;
 import org.junit.Test;
 import ru.ifmo.docking.calculations.LipophilicityCalculator;
 import ru.ifmo.docking.geometry.Point;
@@ -9,6 +10,7 @@ import java.io.FileReader;
 public class LipophilicityCalculatorTest {
 
     @Test
+    @Ignore
     public void test1HPT() throws Exception {
         LipophilicityCalculator calculator = LipophilicityCalculator.construct(new File("data/1HPT_extracted_data/1HPT_extracted.pdb"), new File("data/fi_potentials.txt"));
         try (BufferedReader reader = new BufferedReader(new FileReader("data/1HPT_extracted_data/1HPT_extracted_lip.csv"))) {

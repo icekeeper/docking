@@ -1,7 +1,18 @@
 package ru.ifmo.model
 
+import ru.ifmo.docking.model
+import ru.ifmo.docking.geometry.{Point, Vector}
+import ru.ifmo.docking.geometry.Geometry
+import ru.ifmo.docking.model.{Surface, Matrix}
+import scala.collection.JavaConversions._
+
 object GeometryTools {
 
+  def transform(surface: Surface, matrix: Matrix): Surface = {
+    val transformedPoints = surface.points.map(p => GeometryTools.transformPoint(p, matrix))
+    val transformedNormals = surface.normals.map(n => GeometryTools.transformVector(n, matrix))
+    new Surface(surface.name, transformedPoints, transformedNormals, surface.faces, surface.lipophilicity, surface.electricity)
+  }
 
   def computeRotationMatrix(a: Vector, b: Vector): Matrix = {
     val sin = (a cross b).length / (a.length * b.length)
@@ -53,20 +64,20 @@ object GeometryTools {
   }
 
   def transformPoint(p: Point, m: Matrix): Point = {
-    val w = p.x * m(0, 3) + p.y * m(1, 3) + p.z * m(2, 3) + m(3, 3)
+    val w = p.x * m.get(0, 3) + p.y * m.get(1, 3) + p.z * m.get(2, 3) + m.get(3, 3)
     new Point(
-      (p.x * m(0, 0) + p.y * m(1, 0) + p.z * m(2, 0) + m(3, 0)) / w,
-      (p.x * m(0, 1) + p.y * m(1, 1) + p.z * m(2, 1) + m(3, 1)) / w,
-      (p.x * m(0, 2) + p.y * m(1, 2) + p.z * m(2, 2) + m(3, 2)) / w
+      (p.x * m.get(0, 0) + p.y * m.get(1, 0) + p.z * m.get(2, 0) + m.get(3, 0)) / w,
+      (p.x * m.get(0, 1) + p.y * m.get(1, 1) + p.z * m.get(2, 1) + m.get(3, 1)) / w,
+      (p.x * m.get(0, 2) + p.y * m.get(1, 2) + p.z * m.get(2, 2) + m.get(3, 2)) / w
     )
   }
 
   def transformVector(v: Vector, m: Matrix): Vector = {
-    val w = v.x * m(0, 3) + v.y * m(1, 3) + v.z * m(2, 3) + m(3, 3)
+    val w = v.x * m.get(0, 3) + v.y * m.get(1, 3) + v.z * m.get(2, 3) + m.get(3, 3)
     new Vector(
-      (v.x * m(0, 0) + v.y * m(1, 0) + v.z * m(2, 0) + m(3, 0)) / w,
-      (v.x * m(0, 1) + v.y * m(1, 1) + v.z * m(2, 1) + m(3, 1)) / w,
-      (v.x * m(0, 2) + v.y * m(1, 2) + v.z * m(2, 2) + m(3, 2)) / w
+      (v.x * m.get(0, 0) + v.y * m.get(1, 0) + v.z * m.get(2, 0) + m.get(3, 0)) / w,
+      (v.x * m.get(0, 1) + v.y * m.get(1, 1) + v.z * m.get(2, 1) + m.get(3, 1)) / w,
+      (v.x * m.get(0, 2) + v.y * m.get(1, 2) + v.z * m.get(2, 2) + m.get(3, 2)) / w
     )
   }
 
@@ -83,33 +94,33 @@ object GeometryTools {
     ((p1 mul alpha) add (p2 mul beta) add (p3 mul gamma)).asPoint
   }
 
-  def triangleNormal(s: Surface, triangle: (Int, Int, Int)): Vector = {
-    val firstSideVector = Vector.fromPoints(s.points(triangle._1), s.points(triangle._2))
-    val secondSideVector = Vector.fromPoints(s.points(triangle._2), s.points(triangle._3))
+  def triangleNormal(s: model.Surface, triangle: (Int, Int, Int)): Vector = {
+    val firstSideVector = Geometry.vectorFromPoints(s.points.get(triangle._1), s.points.get(triangle._2))
+    val secondSideVector = Geometry.vectorFromPoints(s.points.get(triangle._2), s.points.get(triangle._3))
     val normal = firstSideVector cross secondSideVector
-    if ((normal dot s.normals(triangle._1)) > 0) {
+    if ((normal dot s.normals.get(triangle._1)) > 0) {
       normal.unite
     } else {
       normal.mul(-1).unite
     }
   }
 
-  def computeTriangleTransformMatrix(s1: Surface, t1: (Int, Int, Int), s2: Surface, t2: (Int, Int, Int)): Matrix = {
+  def computeTriangleTransformMatrix(s1: model.Surface, t1: (Int, Int, Int), s2: model.Surface, t2: (Int, Int, Int)): Matrix = {
     val tn1: Vector = GeometryTools.triangleNormal(s1, t1)
     val tn2: Vector = GeometryTools.triangleNormal(s2, t2)
-    val firstTriangle: (Point, Point, Point) = (s1.points(t1._1), s1.points(t1._2), s1.points(t1._3))
-    val secondTriangle: (Point, Point, Point) = (s2.points(t2._1), s2.points(t2._2), s2.points(t2._3))
+    val firstTriangle: (Point, Point, Point) = (s1.points.get(t1._1), s1.points.get(t1._2), s1.points.get(t1._3))
+    val secondTriangle: (Point, Point, Point) = (s2.points.get(t2._1), s2.points.get(t2._2), s2.points.get(t2._3))
     computeTrianglesTransformMatrix(tn1, tn2, firstTriangle, secondTriangle)
   }
 
   def computeTrianglesTransformMatrix(tn1: Vector, tn2: Vector, t1: (Point, Point, Point), t2: (Point, Point, Point)): Matrix = {
     val firstRotationMatrix: Matrix = GeometryTools.computeRotationMatrix(tn1, tn2.mul(-1))
 
-    val firstCenter: Point = GeometryTools.triangleCenter(t1._1, t1._2, t1._3)
-    val secondCenter: Point = GeometryTools.triangleCenter(t2._1, t2._2, t2._3)
+    val firstCenter: Point = triangleCenter(t1._1, t1._2, t1._3)
+    val secondCenter: Point = triangleCenter(t2._1, t2._2, t2._3)
 
-    val firstPointVector: Vector = Vector.fromPoints(t1._1, firstCenter)
-    val secondPointVector: Vector = Vector.fromPoints(t2._1, secondCenter)
+    val firstPointVector: Vector = Geometry.vectorFromPoints(t1._1, firstCenter)
+    val secondPointVector: Vector = Geometry.vectorFromPoints(t2._1, secondCenter)
 
     val rotatedSecondVector = GeometryTools.transformVector(secondPointVector, firstRotationMatrix)
     val secondRotationMatrix = GeometryTools.computeRotationMatrix(firstPointVector, rotatedSecondVector)

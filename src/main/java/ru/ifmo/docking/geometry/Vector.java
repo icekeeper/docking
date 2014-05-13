@@ -20,8 +20,33 @@ public class Vector {
         return this.x * that.x + this.y * that.y + this.z * that.z;
     }
 
+    public Vector cross(Vector that) {
+        return new Vector(this.y * that.z - this.z * that.y, this.z * that.x - this.x * that.z, this.x * that.y - this.y * that.x);
+    }
+
+    public Vector mul(double k) {
+        return new Vector(k * x, k * y, k * z);
+    }
+
+    public Vector sub(Vector that) {
+        return new Vector(x - that.x, y - that.y, z - that.z);
+    }
+
+    public Vector add(Vector that) {
+        return new Vector(x + that.x, y + that.y, z + that.z);
+    }
+
     public double length() {
         return Math.sqrt(dot(this));
     }
+
+    public double lengthSqr() {
+        return dot(this);
+    }
+
+    public Point asPoint() {
+        return new Point(x, y, z);
+    }
+
 
 }

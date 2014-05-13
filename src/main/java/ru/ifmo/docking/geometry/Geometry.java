@@ -11,4 +11,6 @@ public class Geometry {
     public static Vector vectorFromPoints(Point first, Point second) {
         return new Vector(first.x - second.x, first.y - second.y, first.z - second.z);
     }
+
+
 }

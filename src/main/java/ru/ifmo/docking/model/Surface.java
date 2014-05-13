@@ -13,17 +13,20 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class Surface {
+    public final String name;
     public final List<Point> points;
     public final List<Vector> normals;
     public final List<Face> faces;
     public final List<Double> lipophilicity;
     public final List<Double> electricity;
 
-    public Surface(List<Point> points,
+    public Surface(String name,
+                   List<Point> points,
                    List<Vector> normals,
                    List<Face> faces,
                    List<Double> lipophilicity,
                    List<Double> electricity) {
+        this.name = name;
         this.points = Collections.unmodifiableList(points);
         this.normals = Collections.unmodifiableList(normals);
         this.faces = Collections.unmodifiableList(faces);
@@ -31,12 +34,12 @@ public class Surface {
         this.electricity = Collections.unmodifiableList(electricity);
     }
 
-    public static Surface read(File pdbFile, File surface, File electricityFile, File fiPotentials) {
+    public static Surface read(String name, File pdbFile, File surfaceFile, File electricityFile, File fiPotentials) {
         List<Point> points = new ArrayList<>();
         List<Vector> normals = new ArrayList<>();
         List<Face> faces = new ArrayList<>();
 
-        IOUtils.readLines(surface)
+        IOUtils.linesStream(surfaceFile)
                 .map(line -> line.split("\\s+"))
                 .forEach(tokens -> {
                     switch (tokens[0]) {
@@ -58,11 +61,11 @@ public class Surface {
                 .map(calculator::compute)
                 .collect(Collectors.toList());
 
-        List<Double> electricity = IOUtils.readLines(electricityFile)
+        List<Double> electricity = IOUtils.linesStream(electricityFile)
                 .map(line -> Double.valueOf(line.substring(line.lastIndexOf(',') + 1)))
                 .collect(Collectors.toList());
 
-        return new Surface(points, normals, faces, lipophilicity, electricity);
+        return new Surface(name, points, normals, faces, lipophilicity, electricity);
     }
 
     public double getDiameter() {

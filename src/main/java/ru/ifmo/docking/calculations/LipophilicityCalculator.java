@@ -29,7 +29,7 @@ public class LipophilicityCalculator {
     }
 
     private static Collection<Atom> readPdbFile(File pdbFile, Map<String, Double> fiData) {
-        return IOUtils.readLines(pdbFile)
+        return IOUtils.linesStream(pdbFile)
                 .filter(line -> line.startsWith("ATOM  ") || line.startsWith("HETATM"))
                 .map(line -> {
                     String atomName = line.substring(12, 16).trim();

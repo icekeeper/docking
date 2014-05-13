@@ -14,6 +14,7 @@ public class Main {
 
         String firstDir = "data/" + firstFile + "_data";
         Surface firstSurface = Surface.read(
+                firstFile,
                 new File(firstDir, firstFile + ".pdb"),
                 new File(firstDir, firstFile + ".obj"),
                 new File(firstDir, firstFile + "_pot.csv"),
@@ -22,6 +23,7 @@ public class Main {
 
         String secondDir = "data/" + secondFile + "_data";
         Surface secondSurface = Surface.read(
+                secondFile,
                 new File(secondDir, secondFile + ".pdb"),
                 new File(secondDir, secondFile + ".obj"),
                 new File(secondDir, secondFile + "_pot.csv"),

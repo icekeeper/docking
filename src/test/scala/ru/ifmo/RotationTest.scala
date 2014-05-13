@@ -1,7 +1,9 @@
 package ru.ifmo
 
 import org.scalatest.{Matchers, FlatSpec}
-import ru.ifmo.model.{GeometryTools, Matrix, Vector}
+import ru.ifmo.model.GeometryTools
+import ru.ifmo.docking.geometry.Vector
+import ru.ifmo.docking.model.Matrix
 
 class RotationTest extends FlatSpec with Matchers {
 
@@ -11,7 +13,7 @@ class RotationTest extends FlatSpec with Matchers {
 
     val rotationMatrix: Matrix = GeometryTools.computeRotationMatrix(a, b)
 
-    val rotated: Vector = b mul rotationMatrix
+    val rotated: Vector = GeometryTools.transformVector(b, rotationMatrix)
 
     rotated.x should equal(2.0 +- 1e-10)
     rotated.y should equal(4.0 +- 1e-10)
@@ -24,7 +26,7 @@ class RotationTest extends FlatSpec with Matchers {
 
     val rotationMatrix: Matrix = GeometryTools.computeRotationMatrix(a, b)
 
-    val rotated: Vector = b mul rotationMatrix
+    val rotated: Vector = GeometryTools.transformVector(b, rotationMatrix)
 
     rotated.x should equal(2.0 +- 1e-10)
     rotated.y should equal(4.0 +- 1e-10)
@@ -37,7 +39,7 @@ class RotationTest extends FlatSpec with Matchers {
 
     val rotationMatrix: Matrix = GeometryTools.computeRotationMatrix(a, b)
 
-    val rotated: Vector = b mul rotationMatrix
+    val rotated: Vector = GeometryTools.transformVector(b, rotationMatrix)
 
     rotated.x should equal(2.0 +- 1e-10)
     rotated.y should equal(4.0 +- 1e-10)
@@ -50,7 +52,7 @@ class RotationTest extends FlatSpec with Matchers {
 
     val rotationMatrix: Matrix = GeometryTools.computeRotationMatrix(a, b)
 
-    val rotated: Vector = b mul rotationMatrix
+    val rotated: Vector = GeometryTools.transformVector(b, rotationMatrix)
 
     rotated.x should equal(2.0 +- 1e-10)
     rotated.y should equal(4.0 +- 1e-10)
