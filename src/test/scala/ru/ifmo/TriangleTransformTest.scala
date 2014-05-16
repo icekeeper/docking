@@ -1,13 +1,12 @@
 package ru.ifmo
 
 import org.scalatest.{Matchers, FlatSpec}
-import ru.ifmo.model.GeometryTools
-import ru.ifmo.docking.geometry.{Point, Vector}
-import ru.ifmo.docking.model.Matrix
+import ru.ifmo.docking.geometry.{Geometry, Point}
+import scala.collection.JavaConversions._
 
 class TriangleTransformTest extends FlatSpec with Matchers {
 
-  "Attempt to rotate triangle" should "be successfull" in {
+  "Attempt to rotate triangle" should "be successful" in {
     val p1 = new Point(3.0, 5.0, 2.0)
     val p2 = new Point(5.0, 5.0, 6.0)
     val p3 = new Point(8.0, 5.0, 2.0)
@@ -16,14 +15,11 @@ class TriangleTransformTest extends FlatSpec with Matchers {
     val p5 = new Point(7.0, 7.0, 10.0)
     val p6 = new Point(3.0, 10.0, 10.0)
 
-    val n1 = new Vector(0.0, 1.0, 0.0)
-    val n2 = new Vector(0.0, 0.0, -1.0)
+    val matrix = Geometry.findRmsdOptimalTransformationMatrix(List(p4, p5, p6), List(p1, p2, p3))
 
-    val matrix: Matrix = GeometryTools.computeTrianglesTransformMatrix(n1, n2, (p1, p2, p3), (p4, p5, p6))
-
-    val pr1 = GeometryTools.transformPoint(p4, matrix)
-    val pr2 = GeometryTools.transformPoint(p5, matrix)
-    val pr3 = GeometryTools.transformPoint(p6, matrix)
+    val pr1 = Geometry.transformPoint(p4, matrix)
+    val pr2 = Geometry.transformPoint(p5, matrix)
+    val pr3 = Geometry.transformPoint(p6, matrix)
 
 
     pr1.x should equal(3.0 +- 1e-8)
@@ -38,6 +34,29 @@ class TriangleTransformTest extends FlatSpec with Matchers {
     pr3.y should equal(5.0 +- 1e-8)
     pr3.z should equal(2.0 +- 1e-8)
 
+  }
+
+  "Points rotation that minimize RMSD" should "be correct" in {
+    val p1 = new Point(0.0, 0.0, 1.0)
+    val p2 = new Point(0.0, 2.0, 0.0)
+    val p3 = new Point(2.0, 2.0, 0.0)
+    val p4 = new Point(2.0, 0.0, 0.0)
+
+    val p5 = new Point(1.0, 0.0, 0.0)
+    val p6 = new Point(0.0, 0.0, 2.0)
+    val p7 = new Point(0.0, 2.0, 2.0)
+    val p8 = new Point(0.0, 2.0, 0.0)
+
+    val matrix = Geometry.findRmsdOptimalTransformationMatrix(List(p5, p6, p7, p8), List(p1, p2, p3, p4))
+
+    val pr1 = Geometry.transformPoint(p5, matrix)
+    val pr2 = Geometry.transformPoint(p6, matrix)
+    val pr3 = Geometry.transformPoint(p7, matrix)
+    val pr4 = Geometry.transformPoint(p8, matrix)
+
+    val rmsd = Geometry.rmsd(List(p1, p2, p3, p4), List(pr1, pr2, pr3, pr4))
+
+    rmsd should equal(0.0 +- 1e-15)
   }
 
 }

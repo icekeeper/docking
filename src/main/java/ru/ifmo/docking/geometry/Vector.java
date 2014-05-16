@@ -1,5 +1,7 @@
 package ru.ifmo.docking.geometry;
 
+import org.apache.commons.math3.util.FastMath;
+
 public class Vector {
     public final double x;
     public final double y;
@@ -20,6 +22,12 @@ public class Vector {
         return this.x * that.x + this.y * that.y + this.z * that.z;
     }
 
+    public double angle(Vector that) {
+        double cos = this.dot(that) / (this.length() * that.length());
+        return FastMath.acos(cos);
+
+    }
+
     public Vector cross(Vector that) {
         return new Vector(this.y * that.z - this.z * that.y, this.z * that.x - this.x * that.z, this.x * that.y - this.y * that.x);
     }
@@ -37,7 +45,7 @@ public class Vector {
     }
 
     public double length() {
-        return Math.sqrt(dot(this));
+        return FastMath.sqrt(dot(this));
     }
 
     public double lengthSqr() {

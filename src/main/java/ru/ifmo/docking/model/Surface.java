@@ -78,6 +78,16 @@ public class Surface {
         return result;
     }
 
+    public double getAverageEdgeLength() {
+        double sum = 0.0;
+        for (Face face : faces) {
+            sum += Geometry.distance(points.get(face.p1 - 1), points.get(face.p2 - 1));
+            sum += Geometry.distance(points.get(face.p2 - 1), points.get(face.p3 - 1));
+            sum += Geometry.distance(points.get(face.p3 - 1), points.get(face.p1 - 1));
+        }
+        return sum / (faces.size() * 3);
+    }
+
 
     public static class Face {
         public final int p1;

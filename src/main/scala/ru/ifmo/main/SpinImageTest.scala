@@ -3,10 +3,8 @@ package ru.ifmo.main
 import java.io.{PrintWriter, File}
 import scala.collection.mutable
 import scalax.chart.api._
-import scala.io.Source
 import scala.collection.parallel.ParSeq
-import ru.ifmo.docking.model.{Matrix, SpinImage, Surface}
-import ru.ifmo.model.GeometryTools
+import ru.ifmo.docking.model.{SpinImage, Surface}
 import scala.collection.JavaConversions._
 import ru.ifmo.docking.geometry.Point
 
@@ -38,9 +36,9 @@ object SpinImageTest {
     //                printClosesPoints(first, second)
     //    printClosesPointsSimilarity(first, second)
     //    printMaxSimilarity(first, second)
-    //    printPLYFiles(first, second)
+    //        printPLYFiles(first, second)
     printContactPointsStats(first, second)
-    //    printSurfaceStats(first, second)
+    //        printSurfaceStats(first, second)
     //    searchDockingSolutions(first, second)
     //    drawLipHistogram(first, second)
     //    drawElHistogram(first, second)
@@ -55,216 +53,6 @@ object SpinImageTest {
     printSurfaceAsPLY(first, firstColors, new File("first.ply"))
     printSurfaceAsPLY(second, secondColors, new File("second.ply"))
     printSurfaceAsPLY(first, second, correlationPairs, new File("combined.ply"))
-
-  }
-
-  def printMaxSimilarity(first: Surface, second: Surface) {
-    val correlationPairs = findMaxCorrelationPairs(first, second)
-    println(s"Correlation bound: ${correlationPairs.last._3}")
-
-    def pairDist(pairIndex: Int): Double = {
-      val pair = correlationPairs(pairIndex)
-      first.points.get(pair._1) distance second.points.get(pair._2)
-    }
-
-    def pointDist(firstIndex: Int, secondIndex: Int): Double = {
-      val firstPair = correlationPairs(firstIndex)
-      val secondPair = correlationPairs(secondIndex)
-      second.points.get(firstPair._2) distance second.points.get(secondPair._2)
-    }
-
-    def isGoodPair(firstIndex: Int, secondIndex: Int) = {
-      val firstPair = correlationPairs(firstIndex)
-      val secondPair = correlationPairs(secondIndex)
-      val firstDist = first.points.get(firstPair._1) distance first.points.get(secondPair._1)
-      val secondDist = second.points.get(firstPair._2) distance second.points.get(secondPair._2)
-      val delta: Double = Math.abs(firstDist - secondDist)
-
-      val firstDotProduct = first.normals.get(firstPair._1) dot first.normals.get(secondPair._1)
-      val secondDotProduct = second.normals.get(firstPair._2) dot second.normals.get(secondPair._2)
-
-      (firstPair._1 != secondPair._1
-        && firstPair._2 != secondPair._2
-        && delta < 1
-        && firstDist > 3
-        && secondDist > 3
-        && firstDotProduct > 0
-        && secondDotProduct > 0)
-    }
-
-    val indices = (0 until correlationPairs.size).par
-
-    //    val lines = indices.flatMap {
-    //      a: Int => {
-    //        (a + 1 until correlationPairs.size).filter(isGoodPair(a, _)).map(x => (a, x))
-    //      }
-    //    }.seq.toSet
-    //
-    //    val counts: Array[Int] = Array.ofDim(indices.size)
-    //
-    //    lines.foreach {
-    //      case (a, b) =>
-    //        counts(a) += 1
-    //        counts(b) += 1
-    //    }
-    //
-    //    println(s"Got ${lines.size} lines")
-    //
-    //    println(s"Min lines count for point: ${counts.min}")
-    //    println(s"Max lines count for point: ${counts.max}")
-    //    println(s"Avg lines count for point: ${1.0 * counts.sum / counts.length}")
-    //    println(s"Med lines count for point: ${counts.sorted(Ordering.Int)(counts.length / 2)}")
-
-    //    def maxPointsDist(firstIndex: Int, secondIndex: Int) = {
-    //      val firstPair = correlationPairs(firstIndex)
-    //      val secondPair = correlationPairs(secondIndex)
-    //      val firstDist = first.points(firstPair._1) distance first.points(secondPair._1)
-    //      val secondDist = second.points(firstPair._2) distance second.points(secondPair._2)
-    //      Math.max(firstDist, secondDist)
-    //    }
-    //
-    //    def delta(firstIndex: Int, secondIndex: Int) = {
-    //      val firstPair = correlationPairs(firstIndex)
-    //      val secondPair = correlationPairs(secondIndex)
-    //      val firstDist = first.points(firstPair._1) distance first.points(secondPair._1)
-    //      val secondDist = second.points(firstPair._2) distance second.points(secondPair._2)
-    //      Math.abs(firstDist - secondDist)
-    //    }
-    //
-    //    val maxLine: (Int, Int) = lines.maxBy(x => maxPointsDist(x._1, x._2))
-    //    val minLine: (Int, Int) = lines.minBy(x => maxPointsDist(x._1, x._2))
-    //    val sumLine = lines.foldLeft(0.0)((a, x) => a + maxPointsDist(x._1, x._2))
-    //
-    //    println(s"Max line length: ${maxPointsDist(maxLine._1, maxLine._2)}")
-    //    println(s"Min line length: ${maxPointsDist(minLine._1, minLine._2)}")
-    //    println(s"Avg line length: ${sumLine / lines.size}")
-    //
-    //    val maxDelta: (Int, Int) = lines.maxBy(x => delta(x._1, x._2))
-    //    val minDelta: (Int, Int) = lines.minBy(x => delta(x._1, x._2))
-    //    val sumDelta = lines.foldLeft(0.0)((a, x) => a + delta(x._1, x._2))
-    //
-    //    println(s"Max delta: ${delta(maxDelta._1, maxDelta._2)}")
-    //    println(s"Min delta: ${delta(minDelta._1, minDelta._2)}")
-    //    println(s"Avg delta: ${sumDelta / lines.size}")
-
-    //    val maxPair: Int = counts.indexOf(counts.max)
-    //    println(s"Max pair index: $maxPair")
-    //
-    //    def fitsToBasket(buffer: ArrayBuffer[(Int, Int)], pair: (Int, Int), p: Int): Boolean = {
-    //      buffer.forall(x => {
-    //        val p1 = if (x._1 == p) x._2 else x._1
-    //        val p2 = if (pair._1 == p) pair._2 else pair._1
-    //        lines.contains((p1, p2)) || lines.contains((p2, p1))
-    //      })
-    //    }
-    //
-    //    def bigBasketsCount(pair: Int): Int = {
-    //      val baskets = scala.collection.mutable.ArrayBuffer.empty[ArrayBuffer[(Int, Int)]]
-    //      lines.filter(x => x._1 == pair || x._2 == pair).foreach {
-    //        t =>
-    //          val basket: Option[ArrayBuffer[(Int, Int)]] = baskets.find(fitsToBasket(_, t, pair))
-    //          if (basket.isDefined) {
-    //            basket.get += t
-    //          } else {
-    //            val buffer: ArrayBuffer[(Int, Int)] = scala.collection.mutable.ArrayBuffer.empty[(Int, Int)]
-    //            baskets += buffer
-    //            buffer += t
-    //          }
-    //      }
-    //      baskets.count(b => b.size >= 10)
-    //    }
-    //
-    //    val bigBaskets: Seq[(Int, Int)] = indices.filter(i => counts(i) > 1200).map(i => (bigBasketsCount(i), i)).seq
-    //    println(s"Big baskets computed for ${bigBaskets.size} pairs")
-    //
-    //    val sortedBaskets = bigBaskets.sortBy(-_._1)
-    //    sortedBaskets.take(100).foreach(p => {
-    //      println(s"Pair with index ${p._2} has ${p._1} baskets and ${counts(p._2)} lines and dist: ${pairDist(p._2)}")
-    //    })
-
-
-    val triangles = indices.take(10000).flatMap {
-      a: Int => {
-        val candidates = (a + 1 until correlationPairs.size).filter(isGoodPair(a, _))
-
-        val buffer = mutable.ArrayBuffer.empty[(Int, Int, Int)]
-
-        for (bi <- candidates.indices; ci <- bi + 1 until candidates.size) {
-          val b = candidates(bi)
-          val c = candidates(ci)
-          if (isGoodPair(b, c)) {
-            buffer += ((a, b, c))
-          }
-        }
-
-        buffer
-      }
-    }
-
-    println(s"Triangles count: ${triangles.size}")
-
-    val minTriangle = triangles minBy {
-      case (a, b, c) => pairDist(a) + pairDist(b) + pairDist(c)
-    }
-
-    val maxTriangle = triangles maxBy {
-      case (a, b, c) => correlationPairs(a)._3 + correlationPairs(b)._3 + correlationPairs(c)._3
-    }
-
-    val maxSquareTriangle = triangles maxBy {
-      case (a, b, c) => pointDist(a, b) + pointDist(b, c) + pointDist(c, a)
-    }
-
-    println(s"Triangle with min distance has distances: ${pairDist(minTriangle._1)} ${pairDist(minTriangle._2)} ${pairDist(minTriangle._3)}")
-    println(s"Triangle with max correlation has distances: ${pairDist(minTriangle._1)} ${pairDist(minTriangle._2)} ${pairDist(minTriangle._3)}")
-
-    val minTriangleIdiciesFirst = (correlationPairs(minTriangle._1)._1, correlationPairs(minTriangle._2)._1, correlationPairs(minTriangle._3)._1)
-    val minTriangleIdiciesSecond = (correlationPairs(minTriangle._1)._2, correlationPairs(minTriangle._2)._2, correlationPairs(minTriangle._3)._2)
-
-    val minTriangleMatrix: Matrix = GeometryTools.computeTriangleTransformMatrix(first, minTriangleIdiciesFirst, second, minTriangleIdiciesSecond)
-    println(s"Min triangle transform matrix: $minTriangleMatrix")
-
-    val maxTriangleIdiciesFirst = (correlationPairs(maxTriangle._1)._1, correlationPairs(maxTriangle._2)._1, correlationPairs(maxTriangle._3)._1)
-    val maxTriangleIdiciesSecond = (correlationPairs(maxTriangle._1)._2, correlationPairs(maxTriangle._2)._2, correlationPairs(maxTriangle._3)._2)
-
-    val maxTriangleMatrix: Matrix = GeometryTools.computeTriangleTransformMatrix(first, maxTriangleIdiciesFirst, second, maxTriangleIdiciesSecond)
-    println(s"Min triangle transform matrix: $maxTriangleMatrix")
-
-    val maxSquareTriangleIdiciesFirst = (correlationPairs(maxSquareTriangle._1)._1, correlationPairs(maxSquareTriangle._2)._1, correlationPairs(maxSquareTriangle._3)._1)
-    val maxSquareTriangleIdiciesSecond = (correlationPairs(maxSquareTriangle._1)._2, correlationPairs(maxSquareTriangle._2)._2, correlationPairs(maxSquareTriangle._3)._2)
-
-    val maxSquareTriangleMatrix: Matrix = GeometryTools.computeTriangleTransformMatrix(first, maxSquareTriangleIdiciesFirst, second, maxSquareTriangleIdiciesSecond)
-    println(s"Max square triangle transform matrix: $maxSquareTriangleMatrix")
-
-
-    saveSolutionAsPly(second, new File("data/disposed-k_data", "k_min2.ply"), minTriangleMatrix, minTriangleIdiciesSecond)
-    saveSolutionAsPly(second, new File("data/disposed-k_data", "k_max2.ply"), maxTriangleMatrix, maxTriangleIdiciesSecond)
-    saveSolutionAsPly(second, new File("data/disposed-k_data", "k_max_square2.ply"), maxSquareTriangleMatrix, maxSquareTriangleIdiciesSecond)
-
-    //
-    //        val count = spinImagePairs.par.count({
-    //          case ((firstIndex, firstImage), (secondIndex, secondImage)) => (firstImage correlation secondImage) > 0.6
-    //        })
-    //        println(s"Similarity > 0 $count")
-    //
-    //        val sortedPoints: Array[(Int, Int, Double)] = correlationPairs.seq.toArray.sortBy(-_._3)
-    //        sortedPoints.view take 100 foreach {
-    //          case (i, j, c) =>
-    //            val firstPoint = first.points(i)
-    //            val secondPoint = second.points(j)
-    //            println(s"Points $firstPoint, $secondPoint similarity: $c distance: ${firstPoint distance secondPoint}")
-    //          //        println(s"First image: \n${firstStack(i)._2}")
-    //          //        println(s"Second image: \n${secondStack(j)._2}")
-    //        }
-    //
-    //        sortedPoints.view.zipWithIndex filter {
-    //          case ((p1, p2, _), _) => (first.points(p1) distance second.points(p2)) < 1
-    //        } take 100 foreach {
-    //          case ((p1, p2, c), i) =>
-    //            val firstPoint = first.points(p1)
-    //            val secondPoint = second.points(p2)
-    //            println(s"Points $firstPoint, $secondPoint similarity: $c distance: ${firstPoint distance secondPoint} index: $i")
-    //        }
 
   }
 
@@ -331,56 +119,6 @@ object SpinImageTest {
     println(s"[$time] Cliquest lead to initial complex count: ${initialSolutions.size}")
     initialSolutions.foreach(c => println(s"[$time] $c"))
 
-    //    def fitsToBasket(buffer: ArrayBuffer[(Int, Int)], pair: (Int, Int), p: Int): Boolean = {
-    //      buffer.forall(x => {
-    //        val p1 = if (x._1 == p) x._2 else x._1
-    //        val p2 = if (pair._1 == p) pair._2 else pair._1
-    //        lines.contains((p1, p2)) || lines.contains((p2, p1))
-    //      })
-    //    }
-    //
-    //    def bigBasketsCount(pair: Int): Int = {
-    //      val baskets = scala.collection.mutable.ArrayBuffer.empty[ArrayBuffer[(Int, Int)]]
-    //      lines.filter(x => x._1 == pair || x._2 == pair).foreach {
-    //        t =>
-    //          val basket: Option[ArrayBuffer[(Int, Int)]] = baskets.find(fitsToBasket(_, t, pair))
-    //          if (basket.isDefined) {
-    //            basket.get += t
-    //          } else {
-    //            val buffer: ArrayBuffer[(Int, Int)] = scala.collection.mutable.ArrayBuffer.empty[(Int, Int)]
-    //            baskets += buffer
-    //            buffer += t
-    //          }
-    //      }
-    //      baskets.count(b => b.size >= 10)
-    //    }
-    //
-    //    val bigBaskets: Seq[(Int, Int)] = indices.filter(i => counts(i) > 1200).map(i => (bigBasketsCount(i), i)).seq
-    //    println(s"Big baskets computed for ${bigBaskets.size} pairs")
-    //
-    //    val sortedBaskets = bigBaskets.sortBy(-_._1)
-    //    sortedBaskets.take(100).foreach(p => {
-    //      println(s"Pair with index ${p._2} has ${p._1} baskets and ${counts(p._2)} lines and dist: ${pairDist(p._2)}")
-    //    })
-
-
-    //    val triangles = indices.take(10000).flatMap {
-    //      a: Int => {
-    //        val candidates = (a + 1 until correlationPairs.size).filter(isGoodPair(a, _))
-    //
-    //        val buffer = scala.collection.mutable.ArrayBuffer.empty[(Int, Int, Int)]
-    //
-    //        for (bi <- candidates.indices; ci <- bi + 1 until candidates.size) {
-    //          val b = candidates(bi)
-    //          val c = candidates(ci)
-    //          if (isGoodPair(b, c)) {
-    //            buffer += ((a, b, c))
-    //          }
-    //        }
-    //
-    //        buffer
-    //      }
-    //    }
 
   }
 
@@ -466,6 +204,8 @@ object SpinImageTest {
   }
 
   def printSurfaceStats(first: Surface, second: Surface) {
+    println(s"Average edge legth for a first surface is ${first.getAverageEdgeLength}")
+    println(s"Average edge legth for a second surface is ${second.getAverageEdgeLength}")
 
     val firstPoints = for (a <- first.points.indices.iterator; b <- first.points.indices.iterator) yield first.points(a) distance first.points(b)
     println(s"Diameter of first protein: ${firstPoints.max}")
@@ -578,7 +318,7 @@ object SpinImageTest {
     }
 
     val sortedByCorrelation: Seq[(Double, Double, Double, Double)] = data.seq.sortBy(-_._4)
-    val topCandidates: Seq[((Double, Double, Double, Double), Int)] = sortedByCorrelation.zipWithIndex.filter(p => p._1._1 < 1.0)
+    val topCandidates: Seq[((Double, Double, Double, Double), Int)] = sortedByCorrelation.zipWithIndex.filter(p => p._1._1 < 1.0).take(1000)
     topCandidates.foreach(p => println(s"Position ${p._2} data ${p._1} correlation ${p._1._4}"))
 
   }
@@ -771,28 +511,6 @@ object SpinImageTest {
         println(s"have lipophilic potentials ${first.lipophilicity(a)}, ${second.lipophilicity(b)}")
     }
   }
-
-  def applyMatrixToObjFile(surfaceFile: File, output: File, matrix: Matrix) {
-    val lines: Iterator[String] = Source.fromFile(surfaceFile).getLines().map(line => {
-      if (line.startsWith("v")) {
-        val t: Array[String] = line.split("\\s+")
-        val p = new Point(t(1).toDouble, t(2).toDouble, t(3).toDouble)
-        val tp: Point = GeometryTools.transformPoint(p, matrix)
-        Array(t(0), tp.x, tp.y, tp.z).mkString("", " ", "\n")
-      } else {
-        line + "\n"
-      }
-    })
-    val writer = new PrintWriter(output)
-    lines.foreach(writer.write)
-    writer.close()
-  }
-
-  def saveSolutionAsPly(suface: Surface, output: File, matrix: Matrix, triangle: (Int, Int, Int)) {
-    val colors = suface.points.indices.map(i => if (triangle.productIterator.contains(i)) (255, 0, 0) else (0, 0, 0))
-    printSurfaceAsPLY(GeometryTools.transform(suface, matrix), colors, output)
-  }
-
 
   def printSurfaceAsPLY(surface: Surface, colors: Seq[(Int, Int, Int)], output: File) {
     val writer = new PrintWriter(output)

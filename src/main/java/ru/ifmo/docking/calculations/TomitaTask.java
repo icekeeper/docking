@@ -38,7 +38,7 @@ public class TomitaTask extends RecursiveTask<List<List<Docker.PointMatch>>> {
 
             if (startSet != null) {
                 Docker.PointMatch pivot = findPivot(startSet);
-                candidates = Sets.intersection(graph.get(pivot), startSet).immutableCopy();
+                candidates = Sets.difference(startSet, graph.get(pivot)).immutableCopy();
             } else {
                 Docker.PointMatch pivot = findPivot();
                 candidates = Sets.difference(p, graph.get(pivot)).immutableCopy();
@@ -60,7 +60,8 @@ public class TomitaTask extends RecursiveTask<List<List<Docker.PointMatch>>> {
                     TomitaTask tomitaTask = new TomitaTask(r, Sets.intersection(p, n), Sets.intersection(x, n), graph, null);
                     tomitaTask.fork();
                     subtasks.add(tomitaTask);
-                    if (subtasks.size() > 100) {
+
+                    if (subtasks.size() > 1000) {
                         for (TomitaTask subtask : subtasks) {
                             result.addAll(subtask.join());
                         }

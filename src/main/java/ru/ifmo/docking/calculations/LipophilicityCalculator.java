@@ -2,6 +2,7 @@ package ru.ifmo.docking.calculations;
 
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
+import ru.ifmo.docking.model.Atom;
 import ru.ifmo.docking.util.IOUtils;
 
 import java.io.BufferedReader;
@@ -72,13 +73,4 @@ public class LipophilicityCalculator {
     }
 
 
-    private static class Atom {
-        Point p;
-        double fi;
-
-        private Atom(double x, double y, double z, double fi) {
-            this.p = new Point(x, y, z);
-            this.fi = fi;
-        }
-    }
 }
