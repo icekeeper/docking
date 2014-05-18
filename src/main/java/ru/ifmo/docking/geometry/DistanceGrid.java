@@ -1,12 +1,14 @@
 package ru.ifmo.docking.geometry;
 
+import com.google.common.collect.Lists;
 import org.apache.commons.math3.util.FastMath;
 import ru.ifmo.docking.model.Surface;
+import ru.ifmo.docking.util.Pair;
 
 import java.util.Arrays;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class DistanceGrid {
 
@@ -21,8 +23,9 @@ public class DistanceGrid {
 
 
     public DistanceGrid(Surface surface, double step, double margin) {
+        int surfacePointsCount = surface.points.size();
         System.out.println("Grid construction for surface " + surface.name + " started");
-        System.out.println("Surface points count: " + surface.points.size());
+        System.out.println("Surface points count: " + surfacePointsCount);
 
         this.step = step;
         this.minBound = findMinBound(surface, margin);
@@ -42,46 +45,52 @@ public class DistanceGrid {
 
         Arrays.fill(distances, Double.MAX_VALUE);
 
-        for (int i = 0; i < surface.points.size(); i++) {
-            Point p = surface.points.get(i);
-            Vector n = surface.normals.get(i);
-            processSurfacePoint(p, n);
-            if (i % 1000 == 0) {
-                System.out.println(i + " points processed");
-            }
+        int groupSize = surfacePointsCount / Runtime.getRuntime().availableProcessors();
+        List<Pair<Integer, Integer>> groups = Lists.newArrayList();
+        int k = 0;
+        while (k < surfacePointsCount) {
+            groups.add(Pair.of(k, Math.min(k + groupSize, surfacePointsCount)));
+            k += groupSize;
         }
 
-        System.out.println("Close points processing complete");
+        List<double[]> groupsResults = groups.parallelStream()
+                .map(groupPoints -> {
+                    double[] groupDistances = new double[distances.length];
+                    Arrays.fill(groupDistances, Double.MAX_VALUE);
+                    IntStream.range(groupPoints.first, groupPoints.second)
+                            .forEach(i -> {
+                                Point p = surface.points.get(i);
+                                Vector n = surface.normals.get(i);
+                                processSurfacePoint(p, n, groupDistances);
+                            });
+                    return groupDistances;
+                })
+                .collect(Collectors.toList());
 
-        ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-        final CountDownLatch latch = new CountDownLatch(zRes + 1);
-
-        for (int k = 0; k <= zRes; k++) {
-            final int iz = k;
-            executor.submit(() -> {
-                try {
-                    for (int iy = 0; iy <= yRes; iy++) {
-                        for (int ix = 0; ix <= xRes; ix++) {
-                            int index = assembleIndex(ix, iy, iz);
-                            if (Double.MAX_VALUE == distances[index]) {
-                                processGridPoint(ix, iy, iz, surface);
-                            }
-                        }
-                    }
-                } finally {
-                    latch.countDown();
+        for (double[] groupsResult : groupsResults) {
+            for (int i = 0; i < groupsResult.length; i++) {
+                if (Math.abs(distances[i]) > Math.abs(groupsResult[i])) {
+                    distances[i] = groupsResult[i];
                 }
-            });
-        }
-
-        while (latch.getCount() != 0) {
-            try {
-                latch.await();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
             }
         }
-        executor.shutdown();
+
+        System.out.println("Finished processing surface points");
+
+//        IntStream.rangeClosed(0, zRes)
+//                .parallel()
+//                .forEach(iz -> {
+//                    for (int iy = 0; iy <= yRes; iy++) {
+//                        for (int ix = 0; ix <= xRes; ix++) {
+//                            int index = assembleIndex(ix, iy, iz);
+//                            if (Double.MAX_VALUE == distances[index]) {
+//                                processGridPoint(ix, iy, iz, surface);
+//                            }
+//                        }
+//                    }
+//                });
+//
+//        System.out.println("Finished processing grid points");
     }
 
     public double getDistanceForPoint(Point p) {
@@ -92,7 +101,7 @@ public class DistanceGrid {
         }
     }
 
-    private void processSurfacePoint(Point p, Vector n) {
+    private void processSurfacePoint(Point p, Vector n, double[] distances) {
         int kx = (int) FastMath.round((p.x - minBound.x) / step);
         int ky = (int) FastMath.round((p.y - minBound.y) / step);
         int kz = (int) FastMath.round((p.z - minBound.z) / step);

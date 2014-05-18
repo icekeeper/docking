@@ -18,7 +18,19 @@ public class Geometry {
     }
 
     public static Vector vectorFromPoints(Point first, Point second) {
-        return new Vector(first.x - second.x, first.y - second.y, first.z - second.z);
+        return new Vector(second.x - first.x, second.y - first.y, second.z - first.z);
+    }
+
+    public static Vector vectorSum(Vector... vectors) {
+        double x = 0;
+        double y = 0;
+        double z = 0;
+        for (Vector vector : vectors) {
+            x += vector.x;
+            y += vector.y;
+            z += vector.z;
+        }
+        return new Vector(x, y, z);
     }
 
     public static Point centroid(Collection<Point> points) {
@@ -118,9 +130,9 @@ public class Geometry {
     public static Vector transformVector(Vector v, RealMatrix m) {
         double w = v.x * m.getEntry(0, 3) + v.y * m.getEntry(1, 3) + v.z * m.getEntry(2, 3) + m.getEntry(3, 3);
         return new Vector(
-                (v.x * m.getEntry(0, 0) + v.y * m.getEntry(1, 0) + v.z * m.getEntry(2, 0) + m.getEntry(3, 0)) / w,
-                (v.x * m.getEntry(0, 1) + v.y * m.getEntry(1, 1) + v.z * m.getEntry(2, 1) + m.getEntry(3, 1)) / w,
-                (v.x * m.getEntry(0, 2) + v.y * m.getEntry(1, 2) + v.z * m.getEntry(2, 2) + m.getEntry(3, 2)) / w
+                (v.x * m.getEntry(0, 0) + v.y * m.getEntry(1, 0) + v.z * m.getEntry(2, 0)) / w,
+                (v.x * m.getEntry(0, 1) + v.y * m.getEntry(1, 1) + v.z * m.getEntry(2, 1)) / w,
+                (v.x * m.getEntry(0, 2) + v.y * m.getEntry(1, 2) + v.z * m.getEntry(2, 2)) / w
         );
     }
 
@@ -129,6 +141,46 @@ public class Geometry {
         List<Vector> normals = surface.normals.stream().map(n -> transformVector(n, m)).collect(Collectors.toList());
 
         return new Surface(surface.name, points, normals, surface.faces, surface.lipophilicity, surface.electricity);
+    }
+
+    /**
+     * Find rotation matrix that rotates a to b.
+     */
+
+    public static RealMatrix computeRotationMatrix(Vector a, Vector b) {
+        double abLength = a.length() * b.length();
+        double sin = b.cross(a).length() / abLength;
+        double cos = b.dot(a) / abLength;
+
+        if (Math.abs(sin) < 1e-10) {
+            if (cos > 0) {
+                return MatrixUtils.createRealDiagonalMatrix(new double[]{1.0, 1.0, 1.0, 1.0});
+            } else {
+                Vector normal = b.unite();
+                double x = normal.x;
+                double y = normal.y;
+                double z = normal.z;
+
+                return MatrixUtils.createRealMatrix(new double[][]{
+                        {1 - 2 * x * x, -2 * x * y, -2 * x * z, 0.0},
+                        {-2 * x * y, 1 - 2 * y * y, -2 * y * z, 0.0},
+                        {-2 * x * z, -2 * y * z, 1 - 2 * z * z, 0.0},
+                        {0.0, 0.0, 0.0, 1.0}
+                });
+            }
+        } else {
+            Vector rotationAxis = (b.cross(a)).unite();
+            double x = rotationAxis.x;
+            double y = rotationAxis.y;
+            double z = rotationAxis.z;
+
+            return MatrixUtils.createRealMatrix(new double[][]{
+                    {cos + (1 - cos) * x * x, (1 - cos) * x * y - sin * z, (1 - cos) * x * z + sin * y, 0.0},
+                    {(1 - cos) * y * x + sin * z, cos + (1 - cos) * y * y, (1 - cos) * y * z - sin * x, 0.0},
+                    {(1 - cos) * z * x - sin * y, (1 - cos) * z * y + sin * x, cos + (1 - cos) * z * z, 0.0},
+                    {0.0, 0.0, 0.0, 1.0}
+            });
+        }
     }
 
 }

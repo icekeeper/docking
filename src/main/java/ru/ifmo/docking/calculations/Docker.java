@@ -1,6 +1,7 @@
 package ru.ifmo.docking.calculations;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import org.apache.commons.math3.linear.RealMatrix;
 import ru.ifmo.docking.geometry.DistanceGrid;
 import ru.ifmo.docking.geometry.Geometry;
@@ -8,6 +9,7 @@ import ru.ifmo.docking.geometry.Point;
 import ru.ifmo.docking.geometry.Vector;
 import ru.ifmo.docking.model.SpinImage;
 import ru.ifmo.docking.model.Surface;
+import ru.ifmo.docking.util.Pair;
 import ru.ifmo.docking.util.PlyWriter;
 
 import java.io.File;
@@ -25,19 +27,19 @@ public class Docker {
     private final Surface secondSurface;
     private long start;
 
-    public List<RealMatrix> run() {
+    public List<Pair<List<PointMatch>, RealMatrix>> run() {
         start = System.currentTimeMillis();
 
-        DistanceGrid firstSurfaceGrid = new DistanceGrid(firstSurface, 0.2, 0.5);
+        DistanceGrid firstSurfaceGrid = new DistanceGrid(firstSurface, 0.2, 0.2);
         System.out.println((System.currentTimeMillis() - start) + " First surface distance grid constructed");
 
         List<PointMatch> pointMatches = findTopCorrelatedPairs(50000);
         System.out.println((System.currentTimeMillis() - start) + " Point matched. Smallest correlation is " + pointMatches.get(pointMatches.size() - 1).correlation);
-        System.out.println("Close points in first 50000 correlated pairs:");
+        System.out.println("Close points in first correlated pairs:");
 
         for (int index = 0; index < pointMatches.size(); index++) {
             PointMatch match = pointMatches.get(index);
-            if (Geometry.distance(firstSurface.points.get(match.firstPointIndex), secondSurface.points.get(match.secondPointIndex)) < 1.0) {
+            if (Geometry.distance(match.getFirstPoint(), match.getSecondPoint()) < 1.0) {
                 System.out.println(index + " " + match);
             }
         }
@@ -49,32 +51,27 @@ public class Docker {
         System.out.println("Edges count: " + edgesCount);
 
         List<List<PointMatch>> cliques = findCliques(graph, null);
-//        List<List<PointMatch>> cliques = findCliques(graph, Sets.newHashSet(pointMatches.subList(0, 10000)));
         System.out.println((System.currentTimeMillis() - start) + " Cliques computation completed. Cliques count: " + cliques.size());
 
 
 //        printCliquesInfo(firstSurfaceGrid, cliques);
 
-        Map<List<PointMatch>, RealMatrix> cliqueToTransition = cliques.stream().collect(Collectors.toMap(Function.<List<PointMatch>>identity(), this::findTransition));
-
-        List<RealMatrix> consistentTransitions = cliqueToTransition.keySet()
+        List<Pair<List<PointMatch>, RealMatrix>> cliquesWithTransitions = cliques
                 .parallelStream()
-                .filter(clique -> isNormalsConsistent(clique, cliqueToTransition.get(clique)))
-                .map(cliqueToTransition::get)
+                .map(clique -> Pair.of(clique, findTransition(clique)))
                 .collect(Collectors.toList());
 
-        System.out.println("Consistent transitions count: " + consistentTransitions.size());
-
-        return consistentTransitions.parallelStream()
-                .filter(transition -> getMaxPenetration(firstSurfaceGrid, Geometry.transformSurface(secondSurface, transition)) > PENETRATION_THRESHOLD)
+        return cliquesWithTransitions
+                .parallelStream()
+                .filter(clique -> getMaxPenetration(firstSurfaceGrid, Geometry.transformSurface(secondSurface, clique.second)) > PENETRATION_THRESHOLD)
                 .collect(Collectors.toList());
 
     }
 
-    private boolean isNormalsConsistent(List<PointMatch> clique, RealMatrix transitionMatrix) {
+    public static boolean isNormalsConsistent(List<PointMatch> clique, RealMatrix transitionMatrix) {
         for (PointMatch match : clique) {
-            Vector firstNormal = firstSurface.normals.get(match.firstPointIndex);
-            Vector secondNormal = secondSurface.normals.get(match.secondPointIndex);
+            Vector firstNormal = match.getFirstNormal();
+            Vector secondNormal = match.getSecondNormal();
             Vector transformedSecond = Geometry.transformVector(secondNormal, transitionMatrix);
             if (firstNormal.dot(transformedSecond) > 0) {
                 return false;
@@ -90,63 +87,62 @@ public class Docker {
         System.out.println((System.currentTimeMillis() - start) + " Max clique has size: " + maxClique.size());
         System.out.println((System.currentTimeMillis() - start) + " Min clique has size: " + minClique.size());
 
-        List<List<PointMatch>> contactCliques = cliques.stream()
+        List<List<PointMatch>> contactCliques = cliques
+                .parallelStream()
                 .filter(clique -> clique.stream()
-                                .filter(match ->
-                                        Geometry.distance(
-                                                firstSurface.points.get(match.firstPointIndex),
-                                                secondSurface.points.get(match.secondPointIndex)
-                                        ) < 1.0)
+                                .filter(match -> Geometry.distance(match.getFirstPoint(), match.getSecondPoint()) < 1.0)
                                 .count() > 2
                 )
                 .collect(Collectors.toList());
 
         System.out.println((System.currentTimeMillis() - start) + " Contact cliques count: " + contactCliques.size());
 
-        List<List<PointMatch>> consistent = contactCliques.stream()
-                .filter(clique -> isNormalsConsistent(clique, findTransition(clique)))
-                .collect(Collectors.toList());
-
-        System.out.println("Consistent contact cliques count: " + consistent.size());
-
         for (int i = 0; i < contactCliques.size(); i++) {
             List<PointMatch> contactClique = contactCliques.get(i);
             System.out.println("------start-----");
-            System.out.println("Is consistent: " + consistent.contains(contactClique));
-            contactClique.forEach(match -> System.out.println(String.format("%s distance=%f", match, Geometry.distance(
-                            firstSurface.points.get(match.firstPointIndex),
-                            secondSurface.points.get(match.secondPointIndex)
-                    )))
+            contactClique.forEach(match -> System.out.println(
+                            String.format("%s distance=%f",
+                                    match,
+                                    Geometry.distance(match.getFirstPoint(), match.getSecondPoint())
+                            )
+                    )
             );
             System.out.println("Max penetration: " + getMaxPenetration(firstSurfaceGrid, Geometry.transformSurface(secondSurface, findTransition(contactClique))));
-            writeSurfacesWithCliques(firstSurfaceGrid, contactClique, i + 1, "close");
+            writeSurfacesWithCliques(contactClique, i + 1, "close");
             System.out.println("------end-----");
         }
+
+        List<List<PointMatch>> notPenetrated = contactCliques
+                .parallelStream()
+                .filter(clique -> getMaxPenetration(firstSurfaceGrid, Geometry.transformSurface(secondSurface, findTransition(clique))) > PENETRATION_THRESHOLD)
+                .collect(Collectors.toList());
+
+        System.out.println("Contact cliques without penetration count: " + notPenetrated.size());
 
         Map<Integer, List<List<PointMatch>>> grouped = cliques.stream().collect(Collectors.groupingBy(List::size));
         ArrayList<Integer> keys = Lists.newArrayList(grouped.keySet());
         Collections.sort(keys);
-        keys.forEach(key -> System.out.println("Bins of size " + key + ": " + grouped.get(key).size()));
-
-        List<List<PointMatch>> maxCliques = grouped.get(maxClique.size());
-        for (int i = 0; i < maxCliques.size(); i++) {
-            List<PointMatch> clique = maxCliques.get(i);
-            writeSurfacesWithCliques(firstSurfaceGrid, clique, i + 1, "max");
-        }
+        keys.forEach(key -> System.out.println("Cliques of size " + key + ": " + grouped.get(key).size()));
+//
+//        List<List<PointMatch>> maxCliques = grouped.get(maxClique.size());
+//        for (int i = 0; i < maxCliques.size(); i++) {
+//            List<PointMatch> clique = maxCliques.get(i);
+//            writeSurfacesWithCliques(firstSurfaceGrid, clique, i + 1, "max");
+//        }
     }
 
-    private void writeSurfacesWithCliques(DistanceGrid firstSurfaceGrid, List<PointMatch> clique, int num, String prefix) {
+    public void writeSurfacesWithCliques(List<PointMatch> clique, int num, String prefix) {
         List<String> comments = Lists.newArrayList();
         comments.add("clique №" + num);
         comments.addAll(
                 clique.stream().map(pointMatch -> String.format("%s distance=%f", pointMatch, Geometry.distance(
-                        firstSurface.points.get(pointMatch.firstPointIndex),
-                        secondSurface.points.get(pointMatch.secondPointIndex)
+                        pointMatch.getFirstPoint(),
+                        pointMatch.getSecondPoint()
                 ))).collect(Collectors.toList())
         );
 
-        Set<Integer> firstPoints = clique.stream().map(match -> match.firstPointIndex).collect(Collectors.toSet());
-        Set<Integer> secondPoints = clique.stream().map(match -> match.secondPointIndex).collect(Collectors.toSet());
+        Set<Integer> firstPoints = clique.stream().map(match -> match.firstIndex).collect(Collectors.toSet());
+        Set<Integer> secondPoints = clique.stream().map(match -> match.secondIndex).collect(Collectors.toSet());
 
         String firstName = prefix + "_clique_" + num + "_" + firstSurface.name + ".ply";
         String secondName = prefix + "_clique_" + num + "_" + secondSurface.name + ".ply";
@@ -157,13 +153,13 @@ public class Docker {
         writeSurface(transformedSecondSurface, secondPoints, new int[]{0, 0, 255}, comments, secondName);
     }
 
-    private RealMatrix findTransition(List<PointMatch> clique) {
+    public static RealMatrix findTransition(List<PointMatch> clique) {
         List<Point> firstPoints = Lists.newArrayListWithCapacity(clique.size());
         List<Point> secondPoints = Lists.newArrayListWithCapacity(clique.size());
 
         for (PointMatch match : clique) {
-            firstPoints.add(firstSurface.points.get(match.firstPointIndex));
-            secondPoints.add(secondSurface.points.get(match.secondPointIndex));
+            firstPoints.add(match.getFirstPoint());
+            secondPoints.add(match.getSecondPoint());
         }
 
         return Geometry.findRmsdOptimalTransformationMatrix(secondPoints, firstPoints);
@@ -183,11 +179,11 @@ public class Docker {
     }
 
     private List<List<PointMatch>> findCliques(Map<PointMatch, Set<PointMatch>> graph, Set<PointMatch> startSet) {
-        Set<PointMatch> r = Collections.emptySet();
-        Set<PointMatch> p = graph.keySet();
-        Set<PointMatch> x = Collections.emptySet();
+        Set<PointMatch> r = Sets.newHashSet();
+        Set<PointMatch> p = Sets.newHashSet(graph.keySet());
+        Set<PointMatch> x = Sets.newHashSet();
 
-        return ForkJoinPool.commonPool().invoke(new TomitaTask(r, p, x, graph, startSet));
+        return ForkJoinPool.commonPool().invoke(new TomitaTask(r, p, x, graph, startSet, firstSurface, secondSurface));
     }
 
 
@@ -240,13 +236,13 @@ public class Docker {
         return Lists.newArrayList(result.subList(0, count));
     }
 
-    private boolean isGoodPair(PointMatch first, PointMatch second) {
-        if (first.firstPointIndex == second.firstPointIndex || first.secondPointIndex == second.secondPointIndex) {
+    private boolean isGoodPair(PointMatch firstMatch, PointMatch secondMatch) {
+        if (firstMatch.firstIndex == secondMatch.firstIndex || firstMatch.secondIndex == secondMatch.secondIndex) {
             return false;
         }
 
-        double firstDistance = Geometry.distance(firstSurface.points.get(first.firstPointIndex), firstSurface.points.get(second.firstPointIndex));
-        double secondDistance = Geometry.distance(secondSurface.points.get(first.secondPointIndex), secondSurface.points.get(second.secondPointIndex));
+        double firstDistance = Geometry.distance(firstMatch.getFirstPoint(), secondMatch.getFirstPoint());
+        double secondDistance = Geometry.distance(firstMatch.getSecondPoint(), secondMatch.getSecondPoint());
         double distDelta = Math.abs(firstDistance - secondDistance);
 
         if (distDelta > 1.0) {
@@ -254,20 +250,20 @@ public class Docker {
         }
 
         //for angle between each surface point normals
-        double firstAngle = firstSurface.normals.get(first.firstPointIndex).angle(firstSurface.normals.get(second.firstPointIndex));
-        double secondAngle = secondSurface.normals.get(first.secondPointIndex).angle(secondSurface.normals.get(second.secondPointIndex));
+        double firstAngle = firstMatch.getFirstNormal().angle(secondMatch.getFirstNormal());
+        double secondAngle = firstMatch.getSecondNormal().angle(secondMatch.getSecondNormal());
         double normalsAngleDelta = Math.abs(firstAngle - secondAngle);
 
-        if (firstAngle > Math.PI / 2 || secondAngle > Math.PI / 2 || normalsAngleDelta > MAX_ANGLE_DELTA) {
+        if (normalsAngleDelta > MAX_ANGLE_DELTA) {
             return false;
         }
 
-        Vector firstLineVector = Geometry.vectorFromPoints(firstSurface.points.get(first.firstPointIndex), firstSurface.points.get(second.firstPointIndex)).unite();
-        Vector secondLineVector = Geometry.vectorFromPoints(secondSurface.points.get(first.secondPointIndex), secondSurface.points.get(second.secondPointIndex)).unite();
+        Vector firstLineVector = Geometry.vectorFromPoints(secondMatch.getFirstPoint(), firstMatch.getFirstPoint()).unite();
+        Vector secondLineVector = Geometry.vectorFromPoints(secondMatch.getSecondPoint(), firstMatch.getSecondPoint()).unite();
 
         //for angle between line and first normal of pair
-        double firstStartLineAngle = firstSurface.normals.get(first.firstPointIndex).angle(firstLineVector);
-        double secondStartLineAngle = secondSurface.normals.get(first.secondPointIndex).angle(secondLineVector);
+        double firstStartLineAngle = firstMatch.getFirstNormal().angle(firstLineVector);
+        double secondStartLineAngle = firstMatch.getSecondNormal().angle(secondLineVector);
         double startLineAngleDelta = Math.abs(Math.PI - firstStartLineAngle - secondStartLineAngle);
 
         if (startLineAngleDelta > MAX_ANGLE_DELTA) {
@@ -275,8 +271,8 @@ public class Docker {
         }
 
         //for angle between line and second normal of pair
-        double firstEndLineAngle = firstSurface.normals.get(second.firstPointIndex).angle(firstLineVector);
-        double secondEndLineAngle = secondSurface.normals.get(second.secondPointIndex).angle(secondLineVector);
+        double firstEndLineAngle = secondMatch.getFirstNormal().angle(firstLineVector);
+        double secondEndLineAngle = secondMatch.getSecondNormal().angle(secondLineVector);
         double endLineAngleDelta = Math.abs(Math.PI - firstEndLineAngle - secondEndLineAngle);
 
         return endLineAngleDelta < MAX_ANGLE_DELTA;
@@ -290,17 +286,33 @@ public class Docker {
     }
 
     private static double getMaxPenetration(DistanceGrid grid, Surface surface) {
-        return surface.points.stream().mapToDouble(grid::getDistanceForPoint).min().getAsDouble();
+        return surface.points.parallelStream().mapToDouble(grid::getDistanceForPoint).min().getAsDouble();
     }
 
-    public static class PointMatch {
-        final int firstPointIndex;
-        final int secondPointIndex;
+    public class PointMatch {
+        final int firstIndex;
+        final int secondIndex;
         final double correlation;
 
+        public Point getFirstPoint() {
+            return firstSurface.points.get(firstIndex);
+        }
+
+        public Point getSecondPoint() {
+            return secondSurface.points.get(secondIndex);
+        }
+
+        public Vector getFirstNormal() {
+            return firstSurface.normals.get(firstIndex);
+        }
+
+        public Vector getSecondNormal() {
+            return secondSurface.normals.get(secondIndex);
+        }
+
         private PointMatch(int firstPointIndex, int secondPointIndex, double correlation) {
-            this.firstPointIndex = firstPointIndex;
-            this.secondPointIndex = secondPointIndex;
+            this.firstIndex = firstPointIndex;
+            this.secondIndex = secondPointIndex;
             this.correlation = correlation;
         }
 
@@ -311,22 +323,22 @@ public class Docker {
 
             PointMatch that = (PointMatch) o;
 
-            return firstPointIndex == that.firstPointIndex && secondPointIndex == that.secondPointIndex;
+            return firstIndex == that.firstIndex && secondIndex == that.secondIndex;
 
         }
 
         @Override
         public int hashCode() {
-            int result = firstPointIndex;
-            result = 31 * result + secondPointIndex;
+            int result = firstIndex;
+            result = 31 * result + secondIndex;
             return result;
         }
 
         @Override
         public String toString() {
             return "PointMatch{" +
-                    "firstPointIndex=" + firstPointIndex +
-                    ", secondPointIndex=" + secondPointIndex +
+                    "firstIndex=" + firstIndex +
+                    ", secondIndex=" + secondIndex +
                     ", correlation=" + correlation +
                     '}';
         }

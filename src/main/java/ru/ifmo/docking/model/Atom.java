@@ -19,4 +19,7 @@ public class Atom {
         this.fi = 0;
     }
 
+    public Point getPoint() {
+        return p;
+    }
 }

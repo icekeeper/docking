@@ -68,6 +68,30 @@ public class Surface {
         return new Surface(name, points, normals, faces, lipophilicity, electricity);
     }
 
+    public static Surface read(String name, File surfaceFile) {
+        List<Point> points = new ArrayList<>();
+        List<Vector> normals = new ArrayList<>();
+        List<Face> faces = new ArrayList<>();
+
+        IOUtils.linesStream(surfaceFile)
+                .map(line -> line.split("\\s+"))
+                .forEach(tokens -> {
+                    switch (tokens[0]) {
+                        case "v":
+                            points.add(new Point(Double.parseDouble(tokens[1]), Double.parseDouble(tokens[2]), Double.parseDouble(tokens[3])));
+                            break;
+                        case "vn":
+                            normals.add(new Vector(Double.parseDouble(tokens[1]), Double.parseDouble(tokens[2]), Double.parseDouble(tokens[3])).unite());
+                            break;
+                        case "f":
+                            faces.add(new Face(Integer.parseInt(tokens[1]), Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3])));
+                            break;
+                    }
+                });
+
+        return new Surface(name, points, normals, faces, Collections.emptyList(), Collections.emptyList());
+    }
+
     public double getDiameter() {
         double result = 0.0;
         for (Point p1 : points) {

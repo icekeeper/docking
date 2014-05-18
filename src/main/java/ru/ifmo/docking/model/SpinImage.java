@@ -30,7 +30,7 @@ public class SpinImage {
             Point point = surface.points.get(index);
 
             if (Geometry.distance(basePoint, point) < radius) {
-                Vector p = Geometry.vectorFromPoints(point, basePoint);
+                Vector p = Geometry.vectorFromPoints(basePoint, point);
                 double b = normal.dot(p);
                 double a = Math.sqrt(p.length() * p.length() - b * b);
 
