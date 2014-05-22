@@ -47,7 +47,7 @@ public class Main {
 
 //        ArrayList<List<Docker.PointMatch>> cliques = Lists.newArrayList(transitions.keySet());
 //
-//        RealMatrix pdbTransition = getPdbTransition(firstPdb, secondPdb);
+//        RealMatrix pdbTransition = getProteinsCenteringTransition(firstPdb, secondPdb);
 //
 //        for (int i = 0; i < cliques.size(); i++) {
 //            List<Docker.PointMatch> clique = cliques.get(i);
@@ -65,8 +65,8 @@ public class Main {
     }
 
     private static RealMatrix getPdbTransition(File firstPdb, File secondPdb) {
-        List<Atom> firstAtoms = PdbUtil.readPdbFile(firstPdb);
-        List<Atom> secondAtoms = PdbUtil.readPdbFile(secondPdb);
+        List<Atom> firstAtoms = PdbUtil.readPdbFile(firstPdb).getAtoms();
+        List<Atom> secondAtoms = PdbUtil.readPdbFile(secondPdb).getAtoms();
 
         List<Point> firstPoints = firstAtoms.stream().map(Atom::getPoint).collect(Collectors.toList());
         List<Point> secondPoints = secondAtoms.stream().map(Atom::getPoint).collect(Collectors.toList());

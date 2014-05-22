@@ -30,7 +30,7 @@ public class Docker {
     public List<Pair<List<PointMatch>, RealMatrix>> run() {
         start = System.currentTimeMillis();
 
-        DistanceGrid firstSurfaceGrid = new DistanceGrid(firstSurface, 0.2, 0.2);
+        DistanceGrid firstSurfaceGrid = new DistanceGrid(firstSurface, 0.5, 1.0);
         System.out.println((System.currentTimeMillis() - start) + " First surface distance grid constructed");
 
         List<PointMatch> pointMatches = findTopCorrelatedPairs(50000);
@@ -39,7 +39,7 @@ public class Docker {
 
         for (int index = 0; index < pointMatches.size(); index++) {
             PointMatch match = pointMatches.get(index);
-            if (Geometry.distance(match.getFirstPoint(), match.getSecondPoint()) < 1.0) {
+            if (Geometry.distance(match.getFirstPoint(), match.getSecondPoint()) < 2.0) {
                 System.out.println(index + " " + match);
             }
         }
@@ -203,6 +203,29 @@ public class Docker {
                         )
                 );
     }
+
+//    private Map<PointMatch, Set<PointMatch>> constructGraph(List<PointMatch> matches) {
+//        Map<PointMatch, Set<PointMatch>> result = Maps.newHashMap();
+//        for (int i = 0; i < matches.size() - 1; i++) {
+//            for (int j = i + 1; j < matches.size(); j++) {
+//                PointMatch first = matches.get(i);
+//                PointMatch second = matches.get(j);
+//                if (isGoodPair(first, second)) {
+//                    if (!result.containsKey(first)) {
+//                        result.put(first, Sets.newHashSet(second));
+//                    } else {
+//                        result.get(first).add(second);
+//                    }
+//                    if (!result.containsKey(second)) {
+//                        result.put(second, Sets.newHashSet(first));
+//                    } else {
+//                        result.get(second).add(first);
+//                    }
+//                }
+//            }
+//        }
+//        return result;
+//    }
 
 
     private List<PointMatch> findTopCorrelatedPairs(int count) {

@@ -5,6 +5,7 @@ import org.apache.commons.math3.linear.MatrixUtils;
 import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.linear.SingularValueDecomposition;
 import org.apache.commons.math3.util.FastMath;
+import ru.ifmo.docking.model.Atom;
 import ru.ifmo.docking.model.Surface;
 
 import java.util.Collection;
@@ -49,6 +50,15 @@ public class Geometry {
         double s = 0.0;
         for (int i = 0; i < x.size(); i++) {
             double d = distance(x.get(i), y.get(i));
+            s += d * d;
+        }
+        return FastMath.sqrt(s / x.size());
+    }
+
+    public static double atomsRmsd(List<Atom> x, List<Atom> y) {
+        double s = 0.0;
+        for (int i = 0; i < x.size(); i++) {
+            double d = distance(x.get(i).p, y.get(i).p);
             s += d * d;
         }
         return FastMath.sqrt(s / x.size());

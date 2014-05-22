@@ -106,7 +106,7 @@ public class DistanceGrid {
         int ky = (int) FastMath.round((p.y - minBound.y) / step);
         int kz = (int) FastMath.round((p.z - minBound.z) / step);
 
-        int k = (int) FastMath.round(10.0 / step);
+        int k = (int) FastMath.round(12.0 / step);
 
         for (int iz = Math.max(0, kz - k); iz <= Math.min(zRes, kz + k); iz++) {
             for (int iy = Math.max(0, ky - k); iy <= Math.min(yRes, ky + k); iy++) {

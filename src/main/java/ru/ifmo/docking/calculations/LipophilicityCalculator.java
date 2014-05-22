@@ -3,7 +3,7 @@ package ru.ifmo.docking.calculations;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
 import ru.ifmo.docking.model.Atom;
-import ru.ifmo.docking.util.IOUtils;
+import ru.ifmo.docking.util.PdbUtil;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Simple lipophilicity calculator.
@@ -22,30 +21,16 @@ import java.util.stream.Collectors;
 
 public class LipophilicityCalculator {
     private final Collection<Atom> atomsData;
+    private final Map<String, Double> fiData;
 
     public static LipophilicityCalculator construct(File pdbFile, File fiFile) {
         Map<String, Double> fiData = readFiFile(fiFile);
         Collection<Atom> atomsData = readPdbFile(pdbFile, fiData);
-        return new LipophilicityCalculator(atomsData);
+        return new LipophilicityCalculator(atomsData, fiData);
     }
 
     private static Collection<Atom> readPdbFile(File pdbFile, Map<String, Double> fiData) {
-        return IOUtils.linesStream(pdbFile)
-                .filter(line -> line.startsWith("ATOM  ") || line.startsWith("HETATM"))
-                .map(line -> {
-                    String atomName = line.substring(12, 16).trim();
-                    String resName = line.substring(17, 20).trim();
-                    double atomX = Double.parseDouble(line.substring(30, 38).trim());
-                    double atomY = Double.parseDouble(line.substring(38, 46).trim());
-                    double atomZ = Double.parseDouble(line.substring(46, 54).trim());
-
-                    String fiKey = resName + "_" + atomName;
-                    double fi = fiData.containsKey(fiKey) ? fiData.get(fiKey) : Double.NaN;
-
-                    return new Atom(atomX, atomY, atomZ, fi);
-                })
-                .filter(atom -> !Double.isNaN(atom.fi))
-                .collect(Collectors.toList());
+        return PdbUtil.readPdbFile(pdbFile).getAtoms();
     }
 
     private static Map<String, Double> readFiFile(File fiFile) {
@@ -61,15 +46,21 @@ public class LipophilicityCalculator {
         }
     }
 
-    private LipophilicityCalculator(Collection<Atom> atomsData) {
+    private LipophilicityCalculator(Collection<Atom> atomsData, Map<String, Double> fiData) {
         this.atomsData = atomsData;
+        this.fiData = fiData;
     }
 
     public double compute(Point p) {
         return atomsData
                 .stream()
-                .mapToDouble(atom -> 100.0 * atom.fi * Math.exp(-Geometry.distance(p, atom.p)))
+                .filter(atom -> fiData.containsKey(getFiKey(atom)))
+                .mapToDouble(atom -> 100.0 * fiData.get(getFiKey(atom)) * Math.exp(-Geometry.distance(p, atom.p)))
                 .sum();
+    }
+
+    private String getFiKey(Atom atom) {
+        return atom.resName + "_" + atom.name;
     }
 
 
