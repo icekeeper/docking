@@ -1,10 +1,12 @@
 import org.apache.commons.math3.util.FastMath;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.function.Function;
 
 public class SinSpeedTest {
     @Test
+    @Ignore
     public void testAsinSpeed() throws Exception {
         long start = System.currentTimeMillis();
         compute(FastMath::asin);

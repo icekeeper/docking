@@ -113,7 +113,7 @@
                         <manifest>
                             <classpathPrefix>lib/</classpathPrefix>
                             <addClasspath>true</addClasspath>
-                            <mainClass>ru.ifmo.docking.calculations.RmsdTestMain</mainClass>
+                            <mainClass>ru.ifmo.docking.benchmark.RmsdTestMain</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

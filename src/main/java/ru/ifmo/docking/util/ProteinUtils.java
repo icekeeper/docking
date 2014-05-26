@@ -1,5 +1,7 @@
 package ru.ifmo.docking.util;
 
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Maps;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.model.Atom;
@@ -8,19 +10,17 @@ import ru.ifmo.docking.model.Protein;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class RmsdCalculator {
-
-
+public class ProteinUtils {
     public static final int CONTACT_DISTANCE = 10;
 
-    public static Map<Atom, Atom> matchAlphaCarbons(Protein boundReceptor, Protein boundLigand, Protein unboundReceptor, Protein unboundLigand) {
+    public static BiMap<Atom, Atom> matchAlphaCarbons(Protein boundReceptor, Protein boundLigand, Protein unboundReceptor, Protein unboundLigand) {
         Set<Integer> ligandResidues = findContactResidues(boundLigand, boundReceptor);
         Set<Integer> receptorResidues = findContactResidues(boundReceptor, boundLigand);
 
         Map<Integer, Integer> matchedLigandResidues = findMatchedResidues(boundLigand, unboundLigand, ligandResidues);
         Map<Integer, Integer> matchedReceptorResidues = findMatchedResidues(boundReceptor, unboundReceptor, receptorResidues);
 
-        Map<Atom, Atom> alphaCarbonsMatch = Maps.newHashMap();
+        BiMap<Atom, Atom> alphaCarbonsMatch = HashBiMap.create();
         alphaCarbonsMatch.putAll(matchAlphaCarbons(boundLigand, unboundLigand, matchedLigandResidues));
         alphaCarbonsMatch.putAll(matchAlphaCarbons(boundReceptor, unboundReceptor, matchedReceptorResidues));
 
@@ -39,7 +39,8 @@ public class RmsdCalculator {
         Map<Integer, List<Atom>> boundResidues = boundProtein.getResiduesByNum();
         Map<Integer, List<Atom>> unboundResidues = unboundProtein.getResiduesByNum();
 
-        Map<Integer, Integer> result = Maps.newHashMap();
+        BiMap<Integer, Integer> result = HashBiMap.create();
+        Map<Integer, Double> unboundMinRmsd = Maps.newHashMap();
 
         for (Integer contactBoundResidueNum : boundResidueNums) {
             List<Atom> boundResidue = boundResidues.get(contactBoundResidueNum);
@@ -58,7 +59,10 @@ public class RmsdCalculator {
                 }
             }
             if (minRmsd != Double.MAX_VALUE && unboundResidues.get(unboundMinRmsdNum).get(0).resName.equals(resName)) {
-                result.put(contactBoundResidueNum, unboundMinRmsdNum);
+                if (!unboundMinRmsd.containsKey(unboundMinRmsdNum) || unboundMinRmsd.get(unboundMinRmsdNum) > minRmsd) {
+                    result.forcePut(contactBoundResidueNum, unboundMinRmsdNum);
+                    unboundMinRmsd.put(unboundMinRmsdNum, minRmsd);
+                }
             }
         }
 

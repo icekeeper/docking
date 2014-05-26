@@ -12,7 +12,7 @@ public class LipophilicityCalculatorTest {
     @Test
     @Ignore
     public void test1HPT() throws Exception {
-        LipophilicityCalculator calculator = LipophilicityCalculator.construct(new File("data/1HPT_extracted_data/1HPT_extracted.pdb"), new File("data/fi_potentials.txt"));
+        LipophilicityCalculator calculator = LipophilicityCalculator.fromPdb(new File("data/1HPT_extracted_data/1HPT_extracted.pdb"), new File("data/fi_potentials.txt"));
         try (BufferedReader reader = new BufferedReader(new FileReader("data/1HPT_extracted_data/1HPT_extracted_lip.csv"))) {
             reader.lines().forEach(line -> {
                 String[] tokens = line.split(",");
@@ -21,7 +21,7 @@ public class LipophilicityCalculatorTest {
                 double z = Double.parseDouble(tokens[2]);
                 double fi = Double.parseDouble(tokens[3]);
 
-                double newFi = calculator.compute(new Point(x, y, z));
+                double newFi = calculator.calculate(new Point(x, y, z));
                 System.out.println(String.format("%e %e", fi, newFi));
             });
         }

@@ -25,9 +25,9 @@ public class Main {
         File firstPdb = new File(firstDir, firstFile + ".pdb");
         Surface firstSurface = Surface.read(
                 firstFile,
-                firstPdb,
                 new File(firstDir, firstFile + ".obj"),
-                new File(firstDir, firstFile + "_pot.csv"),
+                firstPdb,
+                new File(firstDir, firstFile + ".pqr"),
                 fiPotentials
         );
 
@@ -35,9 +35,9 @@ public class Main {
         File secondPdb = new File(secondDir, secondFile + ".pdb");
         Surface secondSurface = Surface.read(
                 secondFile,
-                secondPdb,
                 new File(secondDir, secondFile + ".obj"),
-                new File(secondDir, secondFile + "_pot.csv"),
+                secondPdb,
+                new File(secondDir, secondFile + ".pqr"),
                 fiPotentials
         );
 
@@ -54,13 +54,13 @@ public class Main {
 //            docker.writeSurfacesWithCliques(clique, (i + 1), "surface");
 //            RealMatrix transition = transitions.get(clique);
 //
-//            PdbUtil.rewritePdb(firstPdb, new File(firstFile + "_solution_" + (i + 1) + ".pdb"), pdbTransition);
-//            PdbUtil.rewritePdb(secondPdb, new File(secondFile + "_solution_" + (i + 1) + ".pdb"), pdbTransition.multiply(transition));
+//            PdbUtil.renumerate(firstPdb, new File(firstFile + "_solution_" + (i + 1) + ".pdb"), pdbTransition);
+//            PdbUtil.renumerate(secondPdb, new File(secondFile + "_solution_" + (i + 1) + ".pdb"), pdbTransition.multiply(transition));
 //        }
 
 //
-//        PdbUtil.rewritePdb(firstPdb, new File(firstFile + "_centered.pdb"), transition);
-//        PdbUtil.rewritePdb(secondPdb, new File(secondFile + "_centered.pdb"), transition);
+//        PdbUtil.renumerate(firstPdb, new File(firstFile + "_centered.pdb"), transition);
+//        PdbUtil.renumerate(secondPdb, new File(secondFile + "_centered.pdb"), transition);
 
     }
 

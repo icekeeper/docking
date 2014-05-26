@@ -12,8 +12,8 @@ public class PdbFixer {
         File firstPdb = new File(args[0]);
         File secondPdb = new File(args[1]);
 //        RealMatrix transition = RmsdTestMain.getProteinsCenteringTransition(firstPdb, secondPdb);
-//        PdbUtil.rewritePdb(firstPdb, new File("fixed_" + args[0]), transition);
-//        PdbUtil.rewritePdb(secondPdb, new File("fixed_" + args[1]), transition);
+//        PdbUtil.renumerate(firstPdb, new File("fixed_" + args[0]), transition);
+//        PdbUtil.renumerate(secondPdb, new File("fixed_" + args[1]), transition);
 
         Protein firstProtein = PdbUtil.readPdbFile(firstPdb);
         Protein secondProtein = PdbUtil.readPdbFile(secondPdb);

@@ -3,13 +3,13 @@ package ru.ifmo.docking.calculations;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
 import ru.ifmo.docking.model.Atom;
+import ru.ifmo.docking.model.Protein;
 import ru.ifmo.docking.util.PdbUtil;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -20,17 +20,12 @@ import java.util.Map;
  */
 
 public class LipophilicityCalculator {
-    private final Collection<Atom> atomsData;
     private final Map<String, Double> fiData;
+    private final Protein protein;
 
-    public static LipophilicityCalculator construct(File pdbFile, File fiFile) {
+    public static LipophilicityCalculator fromPdb(File pdbFile, File fiFile) {
         Map<String, Double> fiData = readFiFile(fiFile);
-        Collection<Atom> atomsData = readPdbFile(pdbFile, fiData);
-        return new LipophilicityCalculator(atomsData, fiData);
-    }
-
-    private static Collection<Atom> readPdbFile(File pdbFile, Map<String, Double> fiData) {
-        return PdbUtil.readPdbFile(pdbFile).getAtoms();
+        return new LipophilicityCalculator(PdbUtil.readPdbFile(pdbFile), fiData);
     }
 
     private static Map<String, Double> readFiFile(File fiFile) {
@@ -46,13 +41,13 @@ public class LipophilicityCalculator {
         }
     }
 
-    private LipophilicityCalculator(Collection<Atom> atomsData, Map<String, Double> fiData) {
-        this.atomsData = atomsData;
+    private LipophilicityCalculator(Protein protein, Map<String, Double> fiData) {
+        this.protein = protein;
         this.fiData = fiData;
     }
 
-    public double compute(Point p) {
-        return atomsData
+    public double calculate(Point p) {
+        return protein.getAtoms()
                 .stream()
                 .filter(atom -> fiData.containsKey(getFiKey(atom)))
                 .mapToDouble(atom -> 100.0 * fiData.get(getFiKey(atom)) * Math.exp(-Geometry.distance(p, atom.p)))

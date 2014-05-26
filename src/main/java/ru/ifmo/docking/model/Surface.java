@@ -1,5 +1,6 @@
 package ru.ifmo.docking.model;
 
+import ru.ifmo.docking.calculations.ElectricityCalculator;
 import ru.ifmo.docking.calculations.LipophilicityCalculator;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
@@ -34,7 +35,7 @@ public class Surface {
         this.electricity = Collections.unmodifiableList(electricity);
     }
 
-    public static Surface read(String name, File pdbFile, File surfaceFile, File electricityFile, File fiPotentials) {
+    public static Surface read(String name, File surfaceFile, File pdbFile, File pqrFile, File fiPotentials) {
         List<Point> points = new ArrayList<>();
         List<Vector> normals = new ArrayList<>();
         List<Face> faces = new ArrayList<>();
@@ -56,13 +57,14 @@ public class Surface {
                 });
 
 
-        LipophilicityCalculator calculator = LipophilicityCalculator.construct(pdbFile, fiPotentials);
+        LipophilicityCalculator calculator = LipophilicityCalculator.fromPdb(pdbFile, fiPotentials);
         List<Double> lipophilicity = points.stream()
-                .map(calculator::compute)
+                .map(calculator::calculate)
                 .collect(Collectors.toList());
 
-        List<Double> electricity = IOUtils.linesStream(electricityFile)
-                .map(line -> Double.valueOf(line.substring(line.lastIndexOf(',') + 1)))
+        ElectricityCalculator electricityCalculator = ElectricityCalculator.fromPqr(pqrFile);
+        List<Double> electricity = points.stream()
+                .map(electricityCalculator::calculate)
                 .collect(Collectors.toList());
 
         return new Surface(name, points, normals, faces, lipophilicity, electricity);
