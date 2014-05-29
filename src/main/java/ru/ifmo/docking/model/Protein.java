@@ -18,13 +18,13 @@ public class Protein {
         return atoms;
     }
 
-    public Map<Integer, List<Atom>> getResiduesByNum() {
-        Map<Integer, List<Atom>> result = Maps.newHashMap();
+    public Map<String, List<Atom>> getResiduesById() {
+        Map<String, List<Atom>> result = Maps.newHashMap();
         for (Atom atom : atoms) {
-            if (!result.containsKey(atom.resSeq)) {
-                result.put(atom.resSeq, Lists.newArrayList());
+            if (!result.containsKey(atom.resId)) {
+                result.put(atom.resId, Lists.newArrayList());
             }
-            result.get(atom.resSeq).add(atom);
+            result.get(atom.resId).add(atom);
         }
         return result;
     }

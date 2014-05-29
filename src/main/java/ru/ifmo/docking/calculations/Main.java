@@ -2,6 +2,7 @@ package ru.ifmo.docking.calculations;
 
 import com.google.common.collect.Lists;
 import org.apache.commons.math3.linear.RealMatrix;
+import ru.ifmo.docking.calculations.dockers.GeometryDocker;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
 import ru.ifmo.docking.model.Atom;
@@ -41,8 +42,8 @@ public class Main {
                 fiPotentials
         );
 
-        Docker docker = new Docker(firstSurface, secondSurface);
-        List<Pair<List<Docker.PointMatch>, RealMatrix>> transitions = docker.run();
+        GeometryDocker docker = new GeometryDocker(firstSurface, secondSurface);
+        List<Pair<List<GeometryDocker.PointMatch>, RealMatrix>> transitions = docker.run();
         System.out.println("Total transitions count: " + transitions.size());
 
 //        ArrayList<List<Docker.PointMatch>> cliques = Lists.newArrayList(transitions.keySet());

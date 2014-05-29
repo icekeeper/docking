@@ -31,10 +31,10 @@ public class ZdockRunner implements DockerRunner {
         System.out.println("Start docking");
         timer.start();
         runProcess(
-////                "mpirun",
-////                "-np",
-////                "" + Runtime.getRuntime().availableProcessors(),
-                "./zdock",
+                "mpirun",
+                "-np",
+                "" + Runtime.getRuntime().availableProcessors(),
+                "zdock",
                 "-N", "4000",
                 "-o", complex + ".out",
                 "-R", unboundReceptorFile + "_m.pdb",

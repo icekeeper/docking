@@ -1,8 +1,9 @@
-package ru.ifmo.docking.calculations;
+package ru.ifmo.docking.calculations.dockers;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.apache.commons.math3.linear.RealMatrix;
+import ru.ifmo.docking.calculations.TomitaTask;
 import ru.ifmo.docking.geometry.DistanceGrid;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
@@ -15,40 +16,44 @@ import ru.ifmo.docking.util.PlyWriter;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.ForkJoinPool;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class Docker {
+public class GeometryDocker implements Docker {
 
     public static final double MAX_ANGLE_DELTA = Math.PI / 8;
     private static final double PENETRATION_THRESHOLD = -5.0;
-    private final Surface firstSurface;
-    private final Surface secondSurface;
-    private long start;
+    protected final Surface firstSurface;
+    protected final Surface secondSurface;
+    protected long start;
 
+    @Override
     public List<Pair<List<PointMatch>, RealMatrix>> run() {
         start = System.currentTimeMillis();
 
-        DistanceGrid firstSurfaceGrid = new DistanceGrid(firstSurface, 0.5, 1.0);
+        DistanceGrid firstSurfaceGrid = new DistanceGrid(firstSurface, 0.5, 0.0);
         System.out.println((System.currentTimeMillis() - start) + " First surface distance grid constructed");
 
-        List<PointMatch> pointMatches = findTopCorrelatedPairs(50000);
-        System.out.println((System.currentTimeMillis() - start) + " Point matched. Smallest correlation is " + pointMatches.get(pointMatches.size() - 1).correlation);
-        System.out.println("Close points in first correlated pairs:");
+//        int pairsCount = Math.min(firstSurface.points.size() * secondSurface.points.size() / 1000, 100000);
+        int pairsCount = 50000;
 
-        for (int index = 0; index < pointMatches.size(); index++) {
-            PointMatch match = pointMatches.get(index);
-            if (Geometry.distance(match.getFirstPoint(), match.getSecondPoint()) < 2.0) {
-                System.out.println(index + " " + match);
-            }
-        }
+        System.out.println("Pairs count will be used: " + pairsCount);
+        List<PointMatch> pointMatches = findTopCorrelatedPairs(pairsCount);
+        System.out.println((System.currentTimeMillis() - start) + " Point matched. Smallest correlation is " + pointMatches.get(pointMatches.size() - 1).correlation);
+//        System.out.println("Close points in first correlated pairs:");
+
+//        for (int index = 0; index < pointMatches.size(); index++) {
+//            PointMatch match = pointMatches.get(index);
+//            if (Geometry.distance(match.getFirstPoint(), match.getSecondPoint()) < 2.0) {
+//                System.out.println(index + " " + match);
+//            }
+//        }
 
         Map<PointMatch, Set<PointMatch>> graph = constructGraph(pointMatches);
         System.out.println((System.currentTimeMillis() - start) + " Graph constructed");
 
-        int edgesCount = graph.values().stream().mapToInt(Set::size).sum() / 2;
-        System.out.println("Edges count: " + edgesCount);
+//        int edgesCount = graph.values().stream().mapToInt(Set::size).sum() / 2;
+//        System.out.println("Edges count: " + edgesCount);
 
         List<List<PointMatch>> cliques = findCliques(graph, null);
         System.out.println((System.currentTimeMillis() - start) + " Cliques computation completed. Cliques count: " + cliques.size());
@@ -187,48 +192,35 @@ public class Docker {
     }
 
 
-    public Docker(Surface firstSurface, Surface secondSurface) {
+    public GeometryDocker(Surface firstSurface, Surface secondSurface) {
         this.firstSurface = firstSurface;
         this.secondSurface = secondSurface;
     }
 
     private Map<PointMatch, Set<PointMatch>> constructGraph(List<PointMatch> matches) {
-        return matches.parallelStream()
-                .collect(
-                        Collectors.toConcurrentMap(
-                                Function.<PointMatch>identity(),
-                                match -> matches.stream()
-                                        .filter(otherMatch -> !match.equals(otherMatch) && isGoodPair(match, otherMatch))
-                                        .collect(Collectors.toSet())
-                        )
-                );
+        Map<PointMatch, Set<PointMatch>> result = IntStream.range(0, matches.size())
+                .parallel()
+                .boxed()
+                .collect(Collectors.toConcurrentMap(
+                        matches::get,
+                        i -> IntStream.range(i + 1, matches.size())
+                                .filter(j -> isGoodPair(matches.get(i), matches.get(j)))
+                                .mapToObj(matches::get)
+                                .collect(Collectors.toCollection(HashSet::new))
+                ));
+
+        for (PointMatch a : result.keySet()) {
+            for (PointMatch b : result.get(a)) {
+                result.get(b).add(a);
+            }
+        }
+
+
+        return result;
     }
 
-//    private Map<PointMatch, Set<PointMatch>> constructGraph(List<PointMatch> matches) {
-//        Map<PointMatch, Set<PointMatch>> result = Maps.newHashMap();
-//        for (int i = 0; i < matches.size() - 1; i++) {
-//            for (int j = i + 1; j < matches.size(); j++) {
-//                PointMatch first = matches.get(i);
-//                PointMatch second = matches.get(j);
-//                if (isGoodPair(first, second)) {
-//                    if (!result.containsKey(first)) {
-//                        result.put(first, Sets.newHashSet(second));
-//                    } else {
-//                        result.get(first).add(second);
-//                    }
-//                    if (!result.containsKey(second)) {
-//                        result.put(second, Sets.newHashSet(first));
-//                    } else {
-//                        result.get(second).add(first);
-//                    }
-//                }
-//            }
-//        }
-//        return result;
-//    }
 
-
-    private List<PointMatch> findTopCorrelatedPairs(int count) {
+    protected List<PointMatch> findTopCorrelatedPairs(int count) {
         List<SpinImage> firstStack = computeSpinImageStack(firstSurface);
         System.out.println((System.currentTimeMillis() - start) + " First stack computed");
         List<SpinImage> secondStack = computeSpinImageStack(secondSurface);
@@ -301,7 +293,7 @@ public class Docker {
         return endLineAngleDelta < MAX_ANGLE_DELTA;
     }
 
-    private static List<SpinImage> computeSpinImageStack(Surface surface) {
+    protected static List<SpinImage> computeSpinImageStack(Surface surface) {
         return IntStream.range(0, surface.points.size())
                 .parallel()
                 .mapToObj(i -> SpinImage.compute(i, surface, 6.0, 1.0))
@@ -309,7 +301,7 @@ public class Docker {
     }
 
     private static double getMaxPenetration(DistanceGrid grid, Surface surface) {
-        return surface.points.parallelStream().mapToDouble(grid::getDistanceForPoint).min().getAsDouble();
+        return surface.points.stream().mapToDouble(grid::getDistanceForPoint).min().getAsDouble();
     }
 
     public class PointMatch {
@@ -333,7 +325,7 @@ public class Docker {
             return secondSurface.normals.get(secondIndex);
         }
 
-        private PointMatch(int firstPointIndex, int secondPointIndex, double correlation) {
+        PointMatch(int firstPointIndex, int secondPointIndex, double correlation) {
             this.firstIndex = firstPointIndex;
             this.secondIndex = secondPointIndex;
             this.correlation = correlation;

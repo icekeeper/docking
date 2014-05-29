@@ -17,6 +17,7 @@ public class Atom {
     final public String pdbCharge;
     final public double charge;
     final public double r;
+    final public String resId;
 
     final public Point p;
 
@@ -86,6 +87,7 @@ public class Atom {
         this.charge = charge;
         this.r = r;
         this.p = p;
+        this.resId = iCode + "_" + resSeq;
     }
 
     public Point getPoint() {

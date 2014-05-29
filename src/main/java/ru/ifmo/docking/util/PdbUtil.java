@@ -74,7 +74,7 @@ public class PdbUtil {
                     double occupancy = Double.parseDouble(line.substring(54, 60).trim());
                     double tempFactor = Double.parseDouble(line.substring(60, 66).trim());
 
-                    String element = line.substring(76, 78);
+                    String element = line.length() >= 78 ? line.substring(76, 78) : "  ";
                     String charge = line.length() >= 80 ? line.substring(78, 80) : "  ";
 
                     return new Atom(
@@ -102,6 +102,7 @@ public class PdbUtil {
     public static Protein readSimplifiedPdbFile(File pdbFile) {
         return new Protein(IOUtils.linesStream(pdbFile)
                 .filter(line -> line.startsWith("ATOM  ") || line.startsWith("HETATM"))
+                .map(line -> line.replaceAll("\\*", ""))
                 .map(line -> {
 
                     String recordName = line.substring(0, 6).trim();
@@ -145,8 +146,12 @@ public class PdbUtil {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
             for (Atom atom : protein.getAtoms()) {
                 writer.write(String.format("%-6s", atom.recordName));
-                writer.write(String.format("%5d  ", atomNum++));
-                writer.write(String.format("%-3s", atom.name));
+                writer.write(String.format("%5d ", atomNum++));
+                if (atom.name.length() > 3) {
+                    writer.write(String.format("%-4s", atom.name));
+                } else {
+                    writer.write(String.format(" %-3s", atom.name));
+                }
                 writer.write(atom.altLock);
                 writer.write(atom.resName);
                 writer.write(" ");
@@ -172,8 +177,12 @@ public class PdbUtil {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(output))) {
             for (Atom atom : protein.getAtoms()) {
                 writer.write(String.format("%-6s", atom.recordName));
-                writer.write(String.format("%5d  ", atom.serial));
-                writer.write(String.format("%-3s", atom.name));
+                writer.write(String.format("%5d ", atom.serial));
+                if (atom.name.length() > 3) {
+                    writer.write(String.format("%-4s", atom.name));
+                } else {
+                    writer.write(String.format(" %-3s", atom.name));
+                }
                 writer.write(atom.altLock);
                 writer.write(atom.resName);
                 writer.write(" ");

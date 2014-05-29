@@ -5,6 +5,7 @@ import ru.ifmo.docking.calculations.LipophilicityCalculator;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
 import ru.ifmo.docking.geometry.Vector;
+import ru.ifmo.docking.util.CollectionUtils;
 import ru.ifmo.docking.util.IOUtils;
 
 import java.io.File;
@@ -18,21 +19,21 @@ public class Surface {
     public final List<Point> points;
     public final List<Vector> normals;
     public final List<Face> faces;
-    public final List<Double> lipophilicity;
-    public final List<Double> electricity;
+    public final double[] lipophilicity;
+    public final double[] electricity;
 
     public Surface(String name,
                    List<Point> points,
                    List<Vector> normals,
                    List<Face> faces,
-                   List<Double> lipophilicity,
-                   List<Double> electricity) {
+                   double[] lipophilicity,
+                   double[] electricity) {
         this.name = name;
         this.points = Collections.unmodifiableList(points);
         this.normals = Collections.unmodifiableList(normals);
         this.faces = Collections.unmodifiableList(faces);
-        this.lipophilicity = Collections.unmodifiableList(lipophilicity);
-        this.electricity = Collections.unmodifiableList(electricity);
+        this.lipophilicity = lipophilicity;
+        this.electricity = electricity;
     }
 
     public static Surface read(String name, File surfaceFile, File pdbFile, File pqrFile, File fiPotentials) {
@@ -58,16 +59,16 @@ public class Surface {
 
 
         LipophilicityCalculator calculator = LipophilicityCalculator.fromPdb(pdbFile, fiPotentials);
-        List<Double> lipophilicity = points.stream()
+        List<Double> lipophilicity = points.parallelStream()
                 .map(calculator::calculate)
                 .collect(Collectors.toList());
 
         ElectricityCalculator electricityCalculator = ElectricityCalculator.fromPqr(pqrFile);
-        List<Double> electricity = points.stream()
+        List<Double> electricity = points.parallelStream()
                 .map(electricityCalculator::calculate)
                 .collect(Collectors.toList());
 
-        return new Surface(name, points, normals, faces, lipophilicity, electricity);
+        return new Surface(name, points, normals, faces, CollectionUtils.listToDoubleArray(lipophilicity), CollectionUtils.listToDoubleArray(electricity));
     }
 
     public static Surface read(String name, File surfaceFile) {
@@ -91,7 +92,7 @@ public class Surface {
                     }
                 });
 
-        return new Surface(name, points, normals, faces, Collections.emptyList(), Collections.emptyList());
+        return new Surface(name, points, normals, faces, null, null);
     }
 
     public double getDiameter() {

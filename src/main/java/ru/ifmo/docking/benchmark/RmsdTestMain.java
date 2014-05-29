@@ -4,6 +4,10 @@ import com.google.common.collect.BiMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.apache.commons.math3.linear.RealMatrix;
+import ru.ifmo.docking.calculations.dockers.ElDocker;
+import ru.ifmo.docking.calculations.dockers.GeometryDocker;
+import ru.ifmo.docking.calculations.dockers.LipDocker;
+import ru.ifmo.docking.calculations.dockers.LipElDocker;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
 import ru.ifmo.docking.model.Atom;
@@ -16,10 +20,7 @@ import ru.ifmo.docking.util.Timer;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -66,8 +67,11 @@ public class RmsdTestMain {
 
         renumerateAtoms(dir, proteinNames);
 
-        runBenchmark(new ZdockRunner(), dir, proteinNames);
-        runBenchmark(new SpinImageDockerRunner(), dir, proteinNames);
+//        runBenchmark(new ZdockRunner(), dir, proteinNames);
+        runBenchmark(new SpinImageDockerRunner("combined", LipElDocker::new), dir, proteinNames);
+        runBenchmark(new SpinImageDockerRunner("electric", ElDocker::new), dir, proteinNames);
+        runBenchmark(new SpinImageDockerRunner("geometry", GeometryDocker::new), dir, proteinNames);
+        runBenchmark(new SpinImageDockerRunner("lipophilic", LipDocker::new), dir, proteinNames);
     }
 
     private static void runBenchmark(DockerRunner runner, File dir, List<String> proteinNames) throws FileNotFoundException {
@@ -88,6 +92,7 @@ public class RmsdTestMain {
 
     private static void renumerateAtoms(File dir, List<String> proteinNames) {
         for (String proteinName : proteinNames) {
+            System.out.println("Renumerating " + proteinName);
             PdbUtil.renumerate(new File(new File(dir, proteinName + "_r_b_data"), proteinName + "_r_b.pdb"), 1);
             PdbUtil.renumerate(new File(new File(dir, proteinName + "_r_u_data"), proteinName + "_r_u.pdb"), 1);
 
@@ -120,8 +125,7 @@ public class RmsdTestMain {
                 .parallel()
                 .mapToObj(i -> {
                     Protein dockedComplex = results.get(i).get();
-                    printAtomsThatDiffer(dockedComplex, unboundReceptorProtein, unboundLigandProtein);
-
+//                    printAtomsThatDiffer(dockedComplex, unboundReceptorProtein, unboundLigandProtein);
                     List<Point> dockedAlphaCarbonPoints = getUnboundCarbonPoints(dockedComplex, alphaCarbonsMapping);
 
                     RealMatrix optimalRmsdTransition = Geometry.findRmsdOptimalTransformationMatrix(dockedAlphaCarbonPoints, boundAlphaCarbonPoints);
@@ -137,14 +141,14 @@ public class RmsdTestMain {
 
         System.out.println("For complex " + complex + " minimum rmsd is: " + minRmsd.first);
 
-        pw.println(String.format("%s\t%f\t%d\t%d\t%d\t%f", complex, minRmsd.first, timer.getTime(), results.size(), alphaCarbonsMapping.size(), interfaceRmsd));
+        pw.println(String.format(Locale.US, "%s\t%f\t%d\t%d\t%d\t%f", complex, minRmsd.first, timer.getTime(), results.size(), alphaCarbonsMapping.size(), interfaceRmsd));
         pw.flush();
 
         PdbUtil.writePdb(new File(dir, dockerRunner.getName() + "_" + complex + "_best.pdb"), results.get(minRmsd.second).get());
         dockerRunner.cleanup(complex);
     }
 
-    private static void printAtomsThatDiffer(Protein dockedComplex, Protein unboundReceptorProtein, Protein unboundLigandProtein) {
+    public static void printAtomsThatDiffer(Protein dockedComplex, Protein unboundReceptorProtein, Protein unboundLigandProtein) {
         for (int i = 0; i < unboundReceptorProtein.getAtoms().size(); i++) {
             Atom dockedAtom = dockedComplex.getAtoms().get(i);
             Atom receptorAtom = unboundReceptorProtein.getAtoms().get(i);
@@ -196,13 +200,20 @@ public class RmsdTestMain {
     }
 
     private static double computeInterfaceRmsd(BiMap<Atom, Atom> alphaCarbonMatching) {
-        List<Atom> bound = Lists.newArrayListWithCapacity(alphaCarbonMatching.size());
-        List<Atom> unbound = Lists.newArrayListWithCapacity(alphaCarbonMatching.size());
+        List<Point> bound = Lists.newArrayListWithCapacity(alphaCarbonMatching.size());
+        List<Point> unbound = Lists.newArrayListWithCapacity(alphaCarbonMatching.size());
         for (Map.Entry<Atom, Atom> entry : alphaCarbonMatching.entrySet()) {
-            bound.add(entry.getKey());
-            unbound.add(entry.getValue());
+            bound.add(entry.getKey().getPoint());
+            unbound.add(entry.getValue().getPoint());
         }
-        return Geometry.atomsRmsd(bound, unbound);
+
+        RealMatrix optimalRmsdTransition = Geometry.findRmsdOptimalTransformationMatrix(bound, unbound);
+        List<Point> transformedBound = bound
+                .stream()
+                .map(p -> Geometry.transformPoint(p, optimalRmsdTransition))
+                .collect(Collectors.toList());
+
+        return Geometry.rmsd(transformedBound, unbound);
     }
 
 }

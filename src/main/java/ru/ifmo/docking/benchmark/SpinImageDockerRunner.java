@@ -2,7 +2,8 @@ package ru.ifmo.docking.benchmark;
 
 import com.google.common.collect.Lists;
 import org.apache.commons.math3.linear.RealMatrix;
-import ru.ifmo.docking.calculations.Docker;
+import ru.ifmo.docking.calculations.dockers.Docker;
+import ru.ifmo.docking.calculations.dockers.GeometryDocker;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
 import ru.ifmo.docking.model.Atom;
@@ -14,10 +15,19 @@ import ru.ifmo.docking.util.Timer;
 
 import java.io.File;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class SpinImageDockerRunner implements DockerRunner {
+
+    private final BiFunction<Surface, Surface, Docker> dockerSupplier;
+    private final String name;
+
+    public SpinImageDockerRunner(String name, BiFunction<Surface, Surface, Docker> dockerSupplier) {
+        this.name = name;
+        this.dockerSupplier = dockerSupplier;
+    }
 
 
     @Override
@@ -26,15 +36,25 @@ public class SpinImageDockerRunner implements DockerRunner {
         String unboundLigandFile = complex + "_l_" + "u";
 
         File unboundReceptorDir = new File(benchmarkDir, unboundReceptorFile + "_data");
-        Surface firstSurface = Surface.read(unboundReceptorFile, new File(unboundReceptorDir, unboundReceptorFile + ".obj"));
+        Surface firstSurface = Surface.read(unboundReceptorFile,
+                new File(unboundReceptorDir, unboundReceptorFile + ".obj"),
+                new File(unboundReceptorDir, unboundReceptorFile + ".pdb"),
+                new File(unboundReceptorDir, unboundReceptorFile + ".pqr"),
+                new File("fi_potentials.txt")
+        );
 
         File unboundLigandDir = new File(benchmarkDir, unboundLigandFile + "_data");
-        Surface secondSurface = Surface.read(unboundLigandFile, new File(unboundLigandDir, unboundLigandFile + ".obj"));
+        Surface secondSurface = Surface.read(unboundLigandFile,
+                new File(unboundLigandDir, unboundLigandFile + ".obj"),
+                new File(unboundLigandDir, unboundLigandFile + ".pdb"),
+                new File(unboundLigandDir, unboundLigandFile + ".pqr"),
+                new File("fi_potentials.txt")
+        );
 
-        Docker docker = new Docker(firstSurface, secondSurface);
+        Docker docker = dockerSupplier.apply(firstSurface, secondSurface);
 
         timer.start();
-        List<Pair<List<Docker.PointMatch>, RealMatrix>> results = docker.run();
+        List<Pair<List<GeometryDocker.PointMatch>, RealMatrix>> results = docker.run();
         timer.stop();
 
         Protein unboundReceptorProtein = readProtein(benchmarkDir, unboundReceptorFile);
@@ -74,7 +94,7 @@ public class SpinImageDockerRunner implements DockerRunner {
 
     @Override
     public String getName() {
-        return "spin";
+        return name;
     }
 
     private static Protein readProtein(File parentDir, String name) {

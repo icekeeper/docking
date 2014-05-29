@@ -14,11 +14,11 @@ public class ProteinUtils {
     public static final int CONTACT_DISTANCE = 10;
 
     public static BiMap<Atom, Atom> matchAlphaCarbons(Protein boundReceptor, Protein boundLigand, Protein unboundReceptor, Protein unboundLigand) {
-        Set<Integer> ligandResidues = findContactResidues(boundLigand, boundReceptor);
-        Set<Integer> receptorResidues = findContactResidues(boundReceptor, boundLigand);
+        Set<String> ligandResidues = findContactResidues(boundLigand, boundReceptor);
+        Set<String> receptorResidues = findContactResidues(boundReceptor, boundLigand);
 
-        Map<Integer, Integer> matchedLigandResidues = findMatchedResidues(boundLigand, unboundLigand, ligandResidues);
-        Map<Integer, Integer> matchedReceptorResidues = findMatchedResidues(boundReceptor, unboundReceptor, receptorResidues);
+        Map<String, String> matchedLigandResidues = findMatchedResidues(boundLigand, unboundLigand, ligandResidues);
+        Map<String, String> matchedReceptorResidues = findMatchedResidues(boundReceptor, unboundReceptor, receptorResidues);
 
         BiMap<Atom, Atom> alphaCarbonsMatch = HashBiMap.create();
         alphaCarbonsMatch.putAll(matchAlphaCarbons(boundLigand, unboundLigand, matchedLigandResidues));
@@ -27,41 +27,41 @@ public class ProteinUtils {
         return alphaCarbonsMatch;
     }
 
-    private static Set<Integer> findContactResidues(Protein first, Protein second) {
+    private static Set<String> findContactResidues(Protein first, Protein second) {
         return first.getAtoms()
                 .stream()
                 .filter(atom -> second.getAtoms().stream().anyMatch(secondAtom -> Geometry.distance(atom.p, secondAtom.p) <= CONTACT_DISTANCE))
-                .map(atom -> atom.resSeq)
+                .map(atom -> atom.iCode + "_" + atom.resSeq)
                 .collect(Collectors.toSet());
     }
 
-    private static Map<Integer, Integer> findMatchedResidues(Protein boundProtein, Protein unboundProtein, Set<Integer> boundResidueNums) {
-        Map<Integer, List<Atom>> boundResidues = boundProtein.getResiduesByNum();
-        Map<Integer, List<Atom>> unboundResidues = unboundProtein.getResiduesByNum();
+    private static Map<String, String> findMatchedResidues(Protein boundProtein, Protein unboundProtein, Set<String> boundResidueIds) {
+        Map<String, List<Atom>> boundResidues = boundProtein.getResiduesById();
+        Map<String, List<Atom>> unboundResidues = unboundProtein.getResiduesById();
 
-        BiMap<Integer, Integer> result = HashBiMap.create();
-        Map<Integer, Double> unboundMinRmsd = Maps.newHashMap();
+        BiMap<String, String> result = HashBiMap.create();
+        Map<String, Double> unboundMinRmsd = Maps.newHashMap();
 
-        for (Integer contactBoundResidueNum : boundResidueNums) {
+        for (String contactBoundResidueNum : boundResidueIds) {
             List<Atom> boundResidue = boundResidues.get(contactBoundResidueNum);
             String resName = boundResidues.get(contactBoundResidueNum).get(0).resName;
 
             double minRmsd = Double.MAX_VALUE;
-            int unboundMinRmsdNum = 0;
-            for (Integer unboundResNum : unboundResidues.keySet()) {
+            String unboundMinRmsdId = "";
+            for (String unboundResNum : unboundResidues.keySet()) {
                 List<Atom> unboundResidue = unboundResidues.get(unboundResNum);
                 if (boundResidue.size() == unboundResidue.size()) {
                     double rmsd = Geometry.atomsRmsd(boundResidue, unboundResidue);
                     if (rmsd < minRmsd) {
                         minRmsd = rmsd;
-                        unboundMinRmsdNum = unboundResNum;
+                        unboundMinRmsdId = unboundResNum;
                     }
                 }
             }
-            if (minRmsd != Double.MAX_VALUE && unboundResidues.get(unboundMinRmsdNum).get(0).resName.equals(resName)) {
-                if (!unboundMinRmsd.containsKey(unboundMinRmsdNum) || unboundMinRmsd.get(unboundMinRmsdNum) > minRmsd) {
-                    result.forcePut(contactBoundResidueNum, unboundMinRmsdNum);
-                    unboundMinRmsd.put(unboundMinRmsdNum, minRmsd);
+            if (minRmsd != Double.MAX_VALUE && unboundResidues.get(unboundMinRmsdId).get(0).resName.equals(resName)) {
+                if (!unboundMinRmsd.containsKey(unboundMinRmsdId) || unboundMinRmsd.get(unboundMinRmsdId) > minRmsd) {
+                    result.forcePut(contactBoundResidueNum, unboundMinRmsdId);
+                    unboundMinRmsd.put(unboundMinRmsdId, minRmsd);
                 }
             }
         }
@@ -69,13 +69,13 @@ public class ProteinUtils {
         return result;
     }
 
-    private static Map<Atom, Atom> matchAlphaCarbons(Protein boundProtein, Protein unboundProtein, Map<Integer, Integer> residuesMatch) {
-        Map<Integer, List<Atom>> boundResidues = boundProtein.getResiduesByNum();
-        Map<Integer, List<Atom>> unboundResidues = unboundProtein.getResiduesByNum();
+    private static Map<Atom, Atom> matchAlphaCarbons(Protein boundProtein, Protein unboundProtein, Map<String, String> residuesMatch) {
+        Map<String, List<Atom>> boundResidues = boundProtein.getResiduesById();
+        Map<String, List<Atom>> unboundResidues = unboundProtein.getResiduesById();
 
         Map<Atom, Atom> result = Maps.newHashMap();
 
-        for (Integer boundResidueNum : residuesMatch.keySet()) {
+        for (String boundResidueNum : residuesMatch.keySet()) {
             Optional<Atom> boundAlphaCarbon = findAlphaCarbon(boundResidues.get(boundResidueNum));
             Optional<Atom> unboundAlphaCarbon = findAlphaCarbon(unboundResidues.get(residuesMatch.get(boundResidueNum)));
             if (boundAlphaCarbon.isPresent() && unboundAlphaCarbon.isPresent()) {

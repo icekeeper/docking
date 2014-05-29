@@ -5,26 +5,27 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.apache.commons.math3.linear.RealMatrix;
+import ru.ifmo.docking.calculations.dockers.GeometryDocker;
 import ru.ifmo.docking.model.Surface;
 
 import java.util.*;
 import java.util.concurrent.RecursiveTask;
 import java.util.stream.Collectors;
 
-public class TomitaTask extends RecursiveTask<List<List<Docker.PointMatch>>> {
-    private final Set<Docker.PointMatch> r;
-    private final Set<Docker.PointMatch> p;
-    private final Set<Docker.PointMatch> x;
-    private final Map<Docker.PointMatch, Set<Docker.PointMatch>> graph;
-    private final Set<Docker.PointMatch> startSet;
+public class TomitaTask extends RecursiveTask<List<List<GeometryDocker.PointMatch>>> {
+    private final Set<GeometryDocker.PointMatch> r;
+    private final Set<GeometryDocker.PointMatch> p;
+    private final Set<GeometryDocker.PointMatch> x;
+    private final Map<GeometryDocker.PointMatch, Set<GeometryDocker.PointMatch>> graph;
+    private final Set<GeometryDocker.PointMatch> startSet;
     private final Surface firstSurface;
     private final Surface secondSurface;
 
-    public TomitaTask(Set<Docker.PointMatch> r,
-                      Set<Docker.PointMatch> p,
-                      Set<Docker.PointMatch> x,
-                      Map<Docker.PointMatch, Set<Docker.PointMatch>> graph,
-                      Set<Docker.PointMatch> startSet,
+    public TomitaTask(Set<GeometryDocker.PointMatch> r,
+                      Set<GeometryDocker.PointMatch> p,
+                      Set<GeometryDocker.PointMatch> x,
+                      Map<GeometryDocker.PointMatch, Set<GeometryDocker.PointMatch>> graph,
+                      Set<GeometryDocker.PointMatch> startSet,
                       Surface firstSurface,
                       Surface secondSurface) {
 
@@ -38,28 +39,28 @@ public class TomitaTask extends RecursiveTask<List<List<Docker.PointMatch>>> {
     }
 
     @Override
-    protected List<List<Docker.PointMatch>> compute() {
+    protected List<List<GeometryDocker.PointMatch>> compute() {
         if (p.size() < 100) {
             return computeRecurrent(r, p, x);
         }
 
-        ImmutableSet<Docker.PointMatch> candidates;
+        ImmutableSet<GeometryDocker.PointMatch> candidates;
 
-        Set<Docker.PointMatch> pivotCandidates = Objects.firstNonNull(startSet, p);
-        Docker.PointMatch pivot = findPivot(pivotCandidates);
+        Set<GeometryDocker.PointMatch> pivotCandidates = Objects.firstNonNull(startSet, p);
+        GeometryDocker.PointMatch pivot = findPivot(pivotCandidates);
         candidates = Sets.difference(pivotCandidates, graph.get(pivot)).immutableCopy();
 
-        List<List<Docker.PointMatch>> result = Lists.newArrayList();
+        List<List<GeometryDocker.PointMatch>> result = Lists.newArrayList();
         Queue<TomitaTask> subtasks = new ArrayDeque<>(1000);
 
-        for (Docker.PointMatch v : candidates) {
+        for (GeometryDocker.PointMatch v : candidates) {
             r.add(v);
             if (isValidClique(r)) {
 
-                Set<Docker.PointMatch> n = graph.get(v);
+                Set<GeometryDocker.PointMatch> n = graph.get(v);
 
-                Set<Docker.PointMatch> pn = intersectionSet(p, n);
-                Set<Docker.PointMatch> xn = intersectionSet(x, n);
+                Set<GeometryDocker.PointMatch> pn = intersectionSet(p, n);
+                Set<GeometryDocker.PointMatch> xn = intersectionSet(x, n);
 
                 if (pn.isEmpty()) {
                     if (xn.isEmpty() && r.size() > 2) {
@@ -87,16 +88,16 @@ public class TomitaTask extends RecursiveTask<List<List<Docker.PointMatch>>> {
         return result;
     }
 
-    private List<List<Docker.PointMatch>> computeRecurrent(Set<Docker.PointMatch> r, Set<Docker.PointMatch> p, Set<Docker.PointMatch> x) {
-        Docker.PointMatch pivot = findPivot(p);
+    private List<List<GeometryDocker.PointMatch>> computeRecurrent(Set<GeometryDocker.PointMatch> r, Set<GeometryDocker.PointMatch> p, Set<GeometryDocker.PointMatch> x) {
+        GeometryDocker.PointMatch pivot = findPivot(p);
 
-        List<List<Docker.PointMatch>> result = Lists.newArrayList();
-        for (Docker.PointMatch v : Sets.difference(p, graph.get(pivot)).immutableCopy()) {
+        List<List<GeometryDocker.PointMatch>> result = Lists.newArrayList();
+        for (GeometryDocker.PointMatch v : Sets.difference(p, graph.get(pivot)).immutableCopy()) {
             r.add(v);
             if (isValidClique(r)) {
-                Set<Docker.PointMatch> n = graph.get(v);
-                Set<Docker.PointMatch> pn = intersectionSet(p, n);
-                Set<Docker.PointMatch> xn = intersectionSet(x, n);
+                Set<GeometryDocker.PointMatch> n = graph.get(v);
+                Set<GeometryDocker.PointMatch> pn = intersectionSet(p, n);
+                Set<GeometryDocker.PointMatch> xn = intersectionSet(x, n);
 
                 if (pn.isEmpty()) {
                     if (xn.isEmpty() && r.size() > 2) {
@@ -115,11 +116,11 @@ public class TomitaTask extends RecursiveTask<List<List<Docker.PointMatch>>> {
         return result;
     }
 
-    private Docker.PointMatch findPivot(Set<Docker.PointMatch> candidates) {
-        Docker.PointMatch max = null;
+    private GeometryDocker.PointMatch findPivot(Set<GeometryDocker.PointMatch> candidates) {
+        GeometryDocker.PointMatch max = null;
         long maxIntersection = -1;
 
-        for (Docker.PointMatch pointMatch : candidates) {
+        for (GeometryDocker.PointMatch pointMatch : candidates) {
             long intersectionSize = intersectionSize(p, graph.get(pointMatch));
             if (intersectionSize > maxIntersection) {
                 maxIntersection = intersectionSize;
@@ -127,7 +128,7 @@ public class TomitaTask extends RecursiveTask<List<List<Docker.PointMatch>>> {
             }
         }
 
-        for (Docker.PointMatch pointMatch : x) {
+        for (GeometryDocker.PointMatch pointMatch : x) {
             long intersectionSize = intersectionSize(p, graph.get(pointMatch));
             if (intersectionSize > maxIntersection) {
                 maxIntersection = intersectionSize;
@@ -138,23 +139,23 @@ public class TomitaTask extends RecursiveTask<List<List<Docker.PointMatch>>> {
         return max;
     }
 
-    private long intersectionSize(Set<Docker.PointMatch> first, Set<Docker.PointMatch> second) {
-        Set<Docker.PointMatch> big = first.size() > second.size() ? first : second;
-        Set<Docker.PointMatch> small = first.size() > second.size() ? second : first;
+    private long intersectionSize(Set<GeometryDocker.PointMatch> first, Set<GeometryDocker.PointMatch> second) {
+        Set<GeometryDocker.PointMatch> big = first.size() > second.size() ? first : second;
+        Set<GeometryDocker.PointMatch> small = first.size() > second.size() ? second : first;
         return small.stream().filter(big::contains).count();
     }
 
-    private Set<Docker.PointMatch> intersectionSet(Set<Docker.PointMatch> first, Set<Docker.PointMatch> second) {
-        Set<Docker.PointMatch> big = first.size() > second.size() ? first : second;
-        Set<Docker.PointMatch> small = first.size() > second.size() ? second : first;
+    private Set<GeometryDocker.PointMatch> intersectionSet(Set<GeometryDocker.PointMatch> first, Set<GeometryDocker.PointMatch> second) {
+        Set<GeometryDocker.PointMatch> big = first.size() > second.size() ? first : second;
+        Set<GeometryDocker.PointMatch> small = first.size() > second.size() ? second : first;
         return small.stream().filter(big::contains).collect(Collectors.toCollection(HashSet::new));
     }
 
-    private boolean isValidClique(Set<Docker.PointMatch> r) {
+    private boolean isValidClique(Set<GeometryDocker.PointMatch> r) {
         if (r.size() > 2) {
-            ArrayList<Docker.PointMatch> rl = Lists.newArrayList(r);
-            RealMatrix transition = Docker.findTransition(rl);
-            return Docker.isNormalsConsistent(rl, transition);
+            ArrayList<GeometryDocker.PointMatch> rl = Lists.newArrayList(r);
+            RealMatrix transition = GeometryDocker.findTransition(rl);
+            return GeometryDocker.isNormalsConsistent(rl, transition);
         }
         return true;
     }
