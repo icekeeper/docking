@@ -32,6 +32,14 @@ public class Pair<T1, T2> {
         return result;
     }
 
+    public T1 getFirst() {
+        return first;
+    }
+
+    public T2 getSecond() {
+        return second;
+    }
+
     @Override
     public String toString() {
         return "(" + first + ", " + second + ')';

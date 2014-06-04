@@ -22,4 +22,9 @@ public class Timer {
             return stopTime - startTime;
         }
     }
+
+    public void setTime(long time) {
+        startTime = 0;
+        stopTime = time;
+    }
 }

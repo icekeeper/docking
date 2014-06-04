@@ -17,7 +17,7 @@ public class Atom {
     final public String pdbCharge;
     final public double charge;
     final public double r;
-    final public String resId;
+    private String resUid = null;
 
     final public Point p;
 
@@ -87,7 +87,6 @@ public class Atom {
         this.charge = charge;
         this.r = r;
         this.p = p;
-        this.resId = iCode + "_" + resSeq;
     }
 
     public Point getPoint() {
@@ -123,23 +122,29 @@ public class Atom {
 
     @Override
     public String toString() {
-        final StringBuilder sb = new StringBuilder("Atom{");
-        sb.append("\nrecordName='").append(recordName).append('\'');
-        sb.append(",\nserial=").append(serial);
-        sb.append(",\nname='").append(name).append('\'');
-        sb.append(",\naltLock=").append(altLock);
-        sb.append(",\nresName='").append(resName).append('\'');
-        sb.append(",\nchainId=").append(chainId);
-        sb.append(",\nresSeq=").append(resSeq);
-        sb.append(",\niCode=").append(iCode);
-        sb.append(",\noccupancy=").append(occupancy);
-        sb.append(",\ntempFactor=").append(tempFactor);
-        sb.append(",\nelement='").append(element).append('\'');
-        sb.append(",\npdbCharge='").append(pdbCharge).append('\'');
-        sb.append(",\ncharge=").append(charge);
-        sb.append(",\nr=").append(r);
-        sb.append(",\np=").append(p);
-        sb.append("\n}");
-        return sb.toString();
+        return "Atom{"
+                + "\nrecordName='" + recordName + '\''
+                + ",\nserial=" + serial
+                + ",\nname='" + name + '\''
+                + ",\naltLock=" + altLock
+                + ",\nresName='" + resName + '\''
+                + ",\nchainId=" + chainId
+                + ",\nresSeq=" + resSeq
+                + ",\niCode=" + iCode
+                + ",\noccupancy=" + occupancy
+                + ",\ntempFactor=" + tempFactor
+                + ",\nelement='" + element + '\''
+                + ",\npdbCharge='" + pdbCharge + '\''
+                + ",\ncharge=" + charge
+                + ",\nr=" + r
+                + ",\np=" + p
+                + "\n}";
+    }
+
+    public String getResidueUid() {
+        if (resUid == null) {
+            resUid = resName + "_" + resSeq + "_" + iCode;
+        }
+        return resUid;
     }
 }

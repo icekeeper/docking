@@ -1,19 +1,18 @@
 package ru.ifmo.docking.benchmark;
 
 import com.google.common.collect.Lists;
+import org.apache.commons.math3.linear.MatrixUtils;
 import org.apache.commons.math3.linear.RealMatrix;
 import ru.ifmo.docking.calculations.dockers.Docker;
-import ru.ifmo.docking.calculations.dockers.GeometryDocker;
 import ru.ifmo.docking.geometry.Geometry;
-import ru.ifmo.docking.geometry.Point;
 import ru.ifmo.docking.model.Atom;
 import ru.ifmo.docking.model.Protein;
 import ru.ifmo.docking.model.Surface;
-import ru.ifmo.docking.util.Pair;
+import ru.ifmo.docking.util.IOUtils;
 import ru.ifmo.docking.util.PdbUtil;
 import ru.ifmo.docking.util.Timer;
 
-import java.io.File;
+import java.io.*;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
@@ -32,57 +31,64 @@ public class SpinImageDockerRunner implements DockerRunner {
 
     @Override
     public List<Supplier<Protein>> run(String complex, File benchmarkDir, Timer timer) {
+        File resultsFileDir = new File(getName() + "_results");
+        if (!resultsFileDir.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            resultsFileDir.mkdirs();
+        }
+        File complextDir = new File(benchmarkDir, complex + "_data");
         String unboundReceptorFile = complex + "_r_" + "u";
         String unboundLigandFile = complex + "_l_" + "u";
 
-        File unboundReceptorDir = new File(benchmarkDir, unboundReceptorFile + "_data");
-        Surface firstSurface = Surface.read(unboundReceptorFile,
-                new File(unboundReceptorDir, unboundReceptorFile + ".obj"),
-                new File(unboundReceptorDir, unboundReceptorFile + ".pdb"),
-                new File(unboundReceptorDir, unboundReceptorFile + ".pqr"),
-                new File("fi_potentials.txt")
-        );
+        File resultTs = new File(resultsFileDir, complex + ".ts");
+        File resultFile = new File(resultsFileDir, complex + ".out");
+        List<RealMatrix> results;
 
-        File unboundLigandDir = new File(benchmarkDir, unboundLigandFile + "_data");
-        Surface secondSurface = Surface.read(unboundLigandFile,
-                new File(unboundLigandDir, unboundLigandFile + ".obj"),
-                new File(unboundLigandDir, unboundLigandFile + ".pdb"),
-                new File(unboundLigandDir, unboundLigandFile + ".pqr"),
-                new File("fi_potentials.txt")
-        );
+        if (resultTs.exists()) {
+            System.out.println("Result exists. Read from file");
+            timer.setTime(readLong(new File(resultsFileDir, complex + ".ts")));
+            results = readResultsFile(resultFile);
+        } else {
+            System.out.println("Run spin docker on: " + complex);
 
-        Docker docker = dockerSupplier.apply(firstSurface, secondSurface);
+            Surface firstSurface = Surface.read(unboundReceptorFile,
+                    new File(complextDir, unboundReceptorFile + ".obj"),
+                    new File(complextDir, unboundReceptorFile + ".pdb"),
+                    new File(complextDir, unboundReceptorFile + ".pqr"),
+                    new File("fi_potentials.txt")
+            );
 
-        timer.start();
-        List<Pair<List<GeometryDocker.PointMatch>, RealMatrix>> results = docker.run();
-        timer.stop();
+            Surface secondSurface = Surface.read(unboundLigandFile,
+                    new File(complextDir, unboundLigandFile + ".obj"),
+                    new File(complextDir, unboundLigandFile + ".pdb"),
+                    new File(complextDir, unboundLigandFile + ".pqr"),
+                    new File("fi_potentials.txt")
+            );
 
-        Protein unboundReceptorProtein = readProtein(benchmarkDir, unboundReceptorFile);
-        Protein unboundLigandProtein = readProtein(benchmarkDir, unboundLigandFile);
+            Docker docker = dockerSupplier.apply(firstSurface, secondSurface);
 
-        RealMatrix pdbTransition = getProteinsCenteringTransition(unboundReceptorProtein, unboundLigandProtein);
+            timer.start();
+            results = docker.run();
+            timer.stop();
 
-        List<Atom> unboundReceptorCenteredAtoms = unboundReceptorProtein.getAtoms()
-                .stream()
-                .map(atom -> transformAtom(atom, pdbTransition))
-                .collect(Collectors.toList());
+            writeLong(resultTs, timer.getTime());
+            writeResultsFile(resultFile, results);
+        }
 
-        List<Atom> unboundLigandCenteredAtoms = unboundLigandProtein.getAtoms()
-                .stream()
-                .map(atom -> transformAtom(atom, pdbTransition))
-                .collect(Collectors.toList());
+
+        Protein unboundReceptorProtein = PdbUtil.readPdbFile(new File(complextDir, unboundReceptorFile + ".pdb"));
+        Protein unboundLigandProtein = PdbUtil.readPdbFile(new File(complextDir, unboundLigandFile + ".pdb"));
 
         //noinspection RedundantCast
         return results.stream()
-                .map(pair -> (Supplier<Protein>) () -> {
-                    RealMatrix matrix = pair.second;
-                    List<Atom> result = Lists.newArrayListWithCapacity(unboundLigandCenteredAtoms.size() + unboundLigandCenteredAtoms.size());
-                    result.addAll(unboundReceptorCenteredAtoms);
-                    result.addAll(unboundLigandCenteredAtoms
+                .map(matrix -> (Supplier<Protein>) () -> {
+                    List<Atom> result = Lists.newArrayListWithCapacity(unboundReceptorProtein.getAtoms().size() + unboundLigandProtein.getAtoms().size());
+                    result.addAll(unboundReceptorProtein.getAtoms());
+                    result.addAll(unboundLigandProtein.getAtoms()
                             .stream()
                             .map(atom -> transformAtom(atom, matrix))
                             .collect(Collectors.toList()));
-                    return new Protein(result);
+                    return new Protein(name, result);
                 })
                 .collect(Collectors.toList());
     }
@@ -92,26 +98,50 @@ public class SpinImageDockerRunner implements DockerRunner {
 
     }
 
+    private RealMatrix deserializeMatrix(String string) {
+        double[][] data = new double[4][4];
+        String[] tokens = string.split("\\s+");
+        int i = 0;
+        for (int row = 0; row < 4; row++) {
+            for (int column = 0; column < 4; column++) {
+                data[row][column] = Double.parseDouble(tokens[i++]);
+            }
+        }
+        return MatrixUtils.createRealMatrix(data);
+    }
+
+    private String serializeMatrix(RealMatrix matrix) {
+        double[][] data = matrix.getData();
+        List<String> values = Lists.newArrayList();
+
+        for (double[] row : data) {
+            for (double value : row) {
+                values.add(Double.toString(value));
+            }
+        }
+        return String.join(" ", values);
+    }
+
+    private List<RealMatrix> readResultsFile(File file) {
+        return IOUtils.linesStream(file)
+                .map(this::deserializeMatrix)
+                .collect(Collectors.toList());
+    }
+
+    private void writeResultsFile(File file, List<RealMatrix> results) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+            for (RealMatrix result : results) {
+                writer.write(serializeMatrix(result));
+                writer.write("\n");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Override
     public String getName() {
         return name;
-    }
-
-    private static Protein readProtein(File parentDir, String name) {
-        File dir = new File(parentDir, name + "_data");
-        File pdb = new File(dir, name + ".pdb");
-        return PdbUtil.readPdbFile(pdb);
-    }
-
-    public static RealMatrix getProteinsCenteringTransition(Protein firstProtein, Protein secondProtein) {
-        List<Point> firstPoints = firstProtein.getAtoms().stream().map(Atom::getPoint).collect(Collectors.toList());
-        List<Point> secondPoints = secondProtein.getAtoms().stream().map(Atom::getPoint).collect(Collectors.toList());
-
-        List<Point> points = Lists.newArrayList(firstPoints);
-        points.addAll(secondPoints);
-
-        Point pdbCentroid = Geometry.centroid(points);
-        return Geometry.getTransitionMatrix(pdbCentroid, new Point(0, 0, 0));
     }
 
     public static Atom transformAtom(Atom atom, RealMatrix matrix) {
@@ -133,4 +163,17 @@ public class SpinImageDockerRunner implements DockerRunner {
                 atom.r
         );
     }
+
+    private Long readLong(File file) {
+        return IOUtils.linesStream(file).map(Long::parseLong).findFirst().get();
+    }
+
+    private void writeLong(File file, long value) {
+        try (PrintWriter pw = new PrintWriter(file)) {
+            pw.write(value + "\n");
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 }

@@ -1,21 +1,19 @@
 #!/bin/bash
 
-(echo "load $1" && \
- sleep 2 && \
- echo "load $2" && \
- sleep 2 && \
- echo "reset" && \
- echo "h_add" && \
- sleep 1 && \
- echo "show surface" && \
- sleep 3 && \
- echo "disable ${1%.*}" && \
- echo "save ${2%.*}.obj" && \
- sleep 2 && \
- echo "enable ${1%.*}" && \
- echo "disable ${2%.*}" && \
- echo "save ${1%.*}.obj" && \
- sleep 2 && \
- echo "quit") | pymol -cqp
-./compute_surface_data.sh ${1%.*}
-./compute_surface_data.sh ${2%.*}
+function process {
+    python pdb2pqr-1.8/pdb2pqr.py --ff=PARSE $1.pdb $1.pqr
+    ./surface_normalization.scala $1.obj $1.obj
+}
+
+
+pymol -cqr prepare_data.py -- $1
+process $1_r_b
+process $1_l_b
+process $1_r_u
+process $1_l_u
+
+mkdir $1_data
+mv $1*.pdb $1_data
+mv $1*.pqr $1_data
+mv $1*.obj $1_data
+mv *.aln $1_data

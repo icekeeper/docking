@@ -8,9 +8,11 @@ import java.util.List;
 import java.util.Map;
 
 public class Protein {
+    private final String name;
     private final List<Atom> atoms;
 
-    public Protein(List<Atom> atoms) {
+    public Protein(String name, List<Atom> atoms) {
+        this.name = name;
         this.atoms = Collections.unmodifiableList(atoms);
     }
 
@@ -21,11 +23,15 @@ public class Protein {
     public Map<String, List<Atom>> getResiduesById() {
         Map<String, List<Atom>> result = Maps.newHashMap();
         for (Atom atom : atoms) {
-            if (!result.containsKey(atom.resId)) {
-                result.put(atom.resId, Lists.newArrayList());
+            if (!result.containsKey(atom.getResidueUid())) {
+                result.put(atom.getResidueUid(), Lists.newArrayList());
             }
-            result.get(atom.resId).add(atom);
+            result.get(atom.getResidueUid()).add(atom);
         }
         return result;
+    }
+
+    public String getName() {
+        return name;
     }
 }

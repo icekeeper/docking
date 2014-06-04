@@ -7,7 +7,6 @@ import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
 import ru.ifmo.docking.model.Atom;
 import ru.ifmo.docking.model.Surface;
-import ru.ifmo.docking.util.Pair;
 import ru.ifmo.docking.util.PdbUtil;
 
 import java.io.File;
@@ -43,7 +42,7 @@ public class Main {
         );
 
         GeometryDocker docker = new GeometryDocker(firstSurface, secondSurface);
-        List<Pair<List<GeometryDocker.PointMatch>, RealMatrix>> transitions = docker.run();
+        List<RealMatrix> transitions = docker.run();
         System.out.println("Total transitions count: " + transitions.size());
 
 //        ArrayList<List<Docker.PointMatch>> cliques = Lists.newArrayList(transitions.keySet());

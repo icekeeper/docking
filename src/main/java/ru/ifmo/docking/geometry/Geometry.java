@@ -5,7 +5,6 @@ import org.apache.commons.math3.linear.MatrixUtils;
 import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.linear.SingularValueDecomposition;
 import org.apache.commons.math3.util.FastMath;
-import ru.ifmo.docking.model.Atom;
 import ru.ifmo.docking.model.Surface;
 
 import java.util.Collection;
@@ -47,21 +46,18 @@ public class Geometry {
     }
 
     public static double rmsd(List<Point> x, List<Point> y) {
-        double s = 0.0;
-        for (int i = 0; i < x.size(); i++) {
-            double d = distance(x.get(i), y.get(i));
-            s += d * d;
-        }
-        return FastMath.sqrt(s / x.size());
-    }
+        RealMatrix optimalRmsdTransition = Geometry.findRmsdOptimalTransformationMatrix(x, y);
+        List<Point> tx = x
+                .stream()
+                .map(p -> Geometry.transformPoint(p, optimalRmsdTransition))
+                .collect(Collectors.toList());
 
-    public static double atomsRmsd(List<Atom> x, List<Atom> y) {
         double s = 0.0;
-        for (int i = 0; i < x.size(); i++) {
-            double d = distance(x.get(i).p, y.get(i).p);
+        for (int i = 0; i < tx.size(); i++) {
+            double d = distance(tx.get(i), y.get(i));
             s += d * d;
         }
-        return FastMath.sqrt(s / x.size());
+        return FastMath.sqrt(s / tx.size());
     }
 
     /**

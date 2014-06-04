@@ -33,16 +33,19 @@ object SpinImageTest {
     )
     println(s"Second surface read with ${second.points.size()} points")
 
+    println(s"First surface resolution ${first.getAverageEdgeLength}")
+    println(s"Second surface resolution ${second.getAverageEdgeLength}")
+
     //                printClosesPoints(first, second)
     //        printClosesPointsSimilarity(first, second)
     //    printMaxSimilarity(first, second)
     //    printPLYFiles(first, second)
-    //        printContactPointsStats(first, second)
+    //            printContactPointsStats(first, second)
     //            printSurfaceStats(first, second)
     //    searchDockingSolutions(first, second)
     //    drawGeometryHistogramm(first, second)
     //        testFunction(first, second)
-    drawLipHistogram(first, second)
+    //    drawLipHistogram(first, second)
     //    drawElHistogram(first, second)
   }
 

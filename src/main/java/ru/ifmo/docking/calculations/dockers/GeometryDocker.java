@@ -28,7 +28,7 @@ public class GeometryDocker implements Docker {
     protected long start;
 
     @Override
-    public List<Pair<List<PointMatch>, RealMatrix>> run() {
+    public List<RealMatrix> run() {
         start = System.currentTimeMillis();
 
         DistanceGrid firstSurfaceGrid = new DistanceGrid(firstSurface, 0.5, 0.0);
@@ -66,11 +66,18 @@ public class GeometryDocker implements Docker {
                 .map(clique -> Pair.of(clique, findTransition(clique)))
                 .collect(Collectors.toList());
 
+        //        results.sort((o1, o2) -> -Double.compare(getTotalScore(o1), getTotalScore(o2)));
+
         return cliquesWithTransitions
                 .parallelStream()
                 .filter(clique -> getMaxPenetration(firstSurfaceGrid, Geometry.transformSurface(secondSurface, clique.second)) > PENETRATION_THRESHOLD)
+                .map(Pair::getSecond)
                 .collect(Collectors.toList());
 
+    }
+
+    private static double getTotalScore(Pair<List<PointMatch>, RealMatrix> solution) {
+        return solution.first.stream().mapToDouble(PointMatch::getCorrelation).sum();
     }
 
     public static boolean isNormalsConsistent(List<PointMatch> clique, RealMatrix transitionMatrix) {
@@ -323,6 +330,10 @@ public class GeometryDocker implements Docker {
 
         public Vector getSecondNormal() {
             return secondSurface.normals.get(secondIndex);
+        }
+
+        public double getCorrelation() {
+            return correlation;
         }
 
         PointMatch(int firstPointIndex, int secondPointIndex, double correlation) {

@@ -12,8 +12,8 @@ import java.util.stream.Collectors;
 
 public class PdbUtil {
 
-    public static Protein readPqrFile(File pdbFile) {
-        return new Protein(IOUtils.linesStream(pdbFile)
+    public static Protein readPqrFile(File pqrFile) {
+        return new Protein(pqrFile.getName().replace(".pqr", ""), IOUtils.linesStream(pqrFile)
                 .filter(line -> line.startsWith("ATOM  ") || line.startsWith("HETATM"))
                 .map(line -> {
 
@@ -55,7 +55,7 @@ public class PdbUtil {
     }
 
     public static Protein readPdbFile(File pdbFile) {
-        return new Protein(IOUtils.linesStream(pdbFile)
+        return new Protein(pdbFile.getName().replace(".pdb", ""), IOUtils.linesStream(pdbFile)
                 .filter(line -> line.startsWith("ATOM  ") || line.startsWith("HETATM"))
                 .map(line -> {
 
@@ -100,7 +100,7 @@ public class PdbUtil {
     }
 
     public static Protein readSimplifiedPdbFile(File pdbFile) {
-        return new Protein(IOUtils.linesStream(pdbFile)
+        return new Protein(pdbFile.getName().replace(".pdb", ""), IOUtils.linesStream(pdbFile)
                 .filter(line -> line.startsWith("ATOM  ") || line.startsWith("HETATM"))
                 .map(line -> line.replaceAll("\\*", ""))
                 .map(line -> {
