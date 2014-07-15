@@ -22,62 +22,83 @@ import java.util.stream.IntStream;
 public class GeometryDocker implements Docker {
 
     public static final double MAX_ANGLE_DELTA = Math.PI / 8;
-    private static final double PENETRATION_THRESHOLD = -5.0;
     protected final Surface firstSurface;
     protected final Surface secondSurface;
     protected long start;
+
+    private Map<String, List<SpinImage>> cache = new HashMap<>();
 
     @Override
     public List<RealMatrix> run() {
         start = System.currentTimeMillis();
 
-        DistanceGrid firstSurfaceGrid = new DistanceGrid(firstSurface, 0.5, 0.0);
+        DistanceGrid firstSurfaceGrid = new DistanceGrid(firstSurface, 0.25, 1.5);
         System.out.println((System.currentTimeMillis() - start) + " First surface distance grid constructed");
 
 //        int pairsCount = Math.min(firstSurface.points.size() * secondSurface.points.size() / 1000, 100000);
         int pairsCount = 50000;
 
         System.out.println("Pairs count will be used: " + pairsCount);
-        List<PointMatch> pointMatches = findTopCorrelatedPairs(pairsCount);
-        System.out.println((System.currentTimeMillis() - start) + " Point matched. Smallest correlation is " + pointMatches.get(pointMatches.size() - 1).correlation);
-//        System.out.println("Close points in first correlated pairs:");
 
-//        for (int index = 0; index < pointMatches.size(); index++) {
-//            PointMatch match = pointMatches.get(index);
-//            if (Geometry.distance(match.getFirstPoint(), match.getSecondPoint()) < 2.0) {
-//                System.out.println(index + " " + match);
-//            }
-//        }
+        List<List<PointMatch>> cliques = searchForSolutions(pairsCount);
 
-        Map<PointMatch, Set<PointMatch>> graph = constructGraph(pointMatches);
-        System.out.println((System.currentTimeMillis() - start) + " Graph constructed");
-
-//        int edgesCount = graph.values().stream().mapToInt(Set::size).sum() / 2;
-//        System.out.println("Edges count: " + edgesCount);
-
-        List<List<PointMatch>> cliques = findCliques(graph, null);
-        System.out.println((System.currentTimeMillis() - start) + " Cliques computation completed. Cliques count: " + cliques.size());
-
-
-//        printCliquesInfo(firstSurfaceGrid, cliques);
-
-        List<Pair<List<PointMatch>, RealMatrix>> cliquesWithTransitions = cliques
+        return cliques
                 .parallelStream()
-                .map(clique -> Pair.of(clique, findTransition(clique)))
-                .collect(Collectors.toList());
-
-        //        results.sort((o1, o2) -> -Double.compare(getTotalScore(o1), getTotalScore(o2)));
-
-        return cliquesWithTransitions
-                .parallelStream()
-                .filter(clique -> getMaxPenetration(firstSurfaceGrid, Geometry.transformSurface(secondSurface, clique.second)) > PENETRATION_THRESHOLD)
-                .map(Pair::getSecond)
+                .map(GeometryDocker::findTransition)
+                .map(transition -> Pair.of(transition, Geometry.transformSurface(secondSurface, transition)))
+                .map(pair -> Pair.of(pair.first, score(firstSurfaceGrid, pair.second)))
+                .filter(pair -> !Double.isInfinite(pair.second))
+                .sorted((o1, o2) -> -Double.compare(o1.second, o2.second))
+                .map(Pair::getFirst)
                 .collect(Collectors.toList());
 
     }
 
-    private static double getTotalScore(Pair<List<PointMatch>, RealMatrix> solution) {
-        return solution.first.stream().mapToDouble(PointMatch::getCorrelation).sum();
+    @Override
+    public List<RealMatrix> rescore(List<RealMatrix> solutions) {
+        DistanceGrid firstSurfaceGrid = new DistanceGrid(firstSurface, 0.25, 1.5);
+
+        return solutions.parallelStream()
+                .map(transition -> Pair.of(transition, Geometry.transformSurface(secondSurface, transition)))
+                .map(pair -> Pair.of(pair.first, score(firstSurfaceGrid, pair.second)))
+                .filter(pair -> !Double.isInfinite(pair.second))
+                .sorted((o1, o2) -> -Double.compare(o1.second, o2.second))
+                .map(Pair::getFirst)
+                .collect(Collectors.toList());
+    }
+
+    protected List<List<PointMatch>> searchForSolutions(int pairsCount) {
+        List<PointMatch> pointMatches = findTopCorrelatedPairs(pairsCount);
+        System.out.println((System.currentTimeMillis() - start) + " Point matched. Smallest correlation is " + pointMatches.get(pointMatches.size() - 1).correlation);
+
+        Map<PointMatch, Set<PointMatch>> graph = constructGraph(pointMatches);
+        System.out.println((System.currentTimeMillis() - start) + " Graph constructed");
+
+        List<List<PointMatch>> cliques = findCliques(graph, null);
+        System.out.println((System.currentTimeMillis() - start) + " Cliques computation completed. Cliques count: " + cliques.size());
+        return cliques;
+    }
+
+    public double score(DistanceGrid grid, Surface transformedSecond) {
+        int bins[] = new int[4];
+        for (Point point : transformedSecond.points) {
+            double d = grid.getDistanceForPoint(point);
+            if (d < -5.0) {
+                return Double.NEGATIVE_INFINITY;
+            } else if (d < -3.5) {
+                bins[0] += 1;
+            } else if (d < -2.0) {
+                bins[1] += 1;
+            } else if (d < -1.0) {
+                bins[2] += 1;
+            } else if (d < 1.0) {
+                bins[3] += 1;
+            }
+        }
+        if ((bins[3] + bins[2] + bins[1] + bins[0]) > transformedSecond.points.size() * 0.4) {
+            return Double.NEGATIVE_INFINITY;
+        }
+        return (bins[3] - bins[2] - bins[1] * 2.5 - bins[0] * 5);
     }
 
     public static boolean isNormalsConsistent(List<PointMatch> clique, RealMatrix transitionMatrix) {
@@ -90,57 +111,6 @@ public class GeometryDocker implements Docker {
             }
         }
         return true;
-    }
-
-    private void printCliquesInfo(DistanceGrid firstSurfaceGrid, List<List<PointMatch>> cliques) {
-        List<PointMatch> maxClique = cliques.stream().max((s1, s2) -> Integer.compare(s1.size(), s2.size())).get();
-        List<PointMatch> minClique = cliques.stream().min((s1, s2) -> Integer.compare(s1.size(), s2.size())).get();
-
-        System.out.println((System.currentTimeMillis() - start) + " Max clique has size: " + maxClique.size());
-        System.out.println((System.currentTimeMillis() - start) + " Min clique has size: " + minClique.size());
-
-        List<List<PointMatch>> contactCliques = cliques
-                .parallelStream()
-                .filter(clique -> clique.stream()
-                                .filter(match -> Geometry.distance(match.getFirstPoint(), match.getSecondPoint()) < 1.0)
-                                .count() > 2
-                )
-                .collect(Collectors.toList());
-
-        System.out.println((System.currentTimeMillis() - start) + " Contact cliques count: " + contactCliques.size());
-
-        for (int i = 0; i < contactCliques.size(); i++) {
-            List<PointMatch> contactClique = contactCliques.get(i);
-            System.out.println("------start-----");
-            contactClique.forEach(match -> System.out.println(
-                            String.format("%s distance=%f",
-                                    match,
-                                    Geometry.distance(match.getFirstPoint(), match.getSecondPoint())
-                            )
-                    )
-            );
-            System.out.println("Max penetration: " + getMaxPenetration(firstSurfaceGrid, Geometry.transformSurface(secondSurface, findTransition(contactClique))));
-            writeSurfacesWithCliques(contactClique, i + 1, "close");
-            System.out.println("------end-----");
-        }
-
-        List<List<PointMatch>> notPenetrated = contactCliques
-                .parallelStream()
-                .filter(clique -> getMaxPenetration(firstSurfaceGrid, Geometry.transformSurface(secondSurface, findTransition(clique))) > PENETRATION_THRESHOLD)
-                .collect(Collectors.toList());
-
-        System.out.println("Contact cliques without penetration count: " + notPenetrated.size());
-
-        Map<Integer, List<List<PointMatch>>> grouped = cliques.stream().collect(Collectors.groupingBy(List::size));
-        ArrayList<Integer> keys = Lists.newArrayList(grouped.keySet());
-        Collections.sort(keys);
-        keys.forEach(key -> System.out.println("Cliques of size " + key + ": " + grouped.get(key).size()));
-//
-//        List<List<PointMatch>> maxCliques = grouped.get(maxClique.size());
-//        for (int i = 0; i < maxCliques.size(); i++) {
-//            List<PointMatch> clique = maxCliques.get(i);
-//            writeSurfacesWithCliques(firstSurfaceGrid, clique, i + 1, "max");
-//        }
     }
 
     public void writeSurfacesWithCliques(List<PointMatch> clique, int num, String prefix) {
@@ -190,7 +160,7 @@ public class GeometryDocker implements Docker {
         PlyWriter.writeAsPlyFile(surface, colors, file, comments);
     }
 
-    private List<List<PointMatch>> findCliques(Map<PointMatch, Set<PointMatch>> graph, Set<PointMatch> startSet) {
+    protected List<List<PointMatch>> findCliques(Map<PointMatch, Set<PointMatch>> graph, Set<PointMatch> startSet) {
         Set<PointMatch> r = Sets.newHashSet();
         Set<PointMatch> p = Sets.newHashSet(graph.keySet());
         Set<PointMatch> x = Sets.newHashSet();
@@ -199,12 +169,27 @@ public class GeometryDocker implements Docker {
     }
 
 
-    public GeometryDocker(Surface firstSurface, Surface secondSurface) {
-        this.firstSurface = firstSurface;
-        this.secondSurface = secondSurface;
+    public GeometryDocker(File complexDir, String complex) {
+        String unboundReceptorFile = complex + "_r_" + "u";
+        String unboundLigandFile = complex + "_l_" + "u";
+
+        this.firstSurface = Surface.read(unboundReceptorFile,
+                new File(complexDir, unboundReceptorFile + ".obj"),
+                new File(complexDir, unboundReceptorFile + ".pdb"),
+                new File(complexDir, unboundReceptorFile + ".pqr"),
+                new File("fi_potentials.txt")
+        );
+
+        this.secondSurface = Surface.read(unboundLigandFile,
+                new File(complexDir, unboundLigandFile + ".obj"),
+                new File(complexDir, unboundLigandFile + ".pdb"),
+                new File(complexDir, unboundLigandFile + ".pqr"),
+                new File("fi_potentials.txt")
+        );
+
     }
 
-    private Map<PointMatch, Set<PointMatch>> constructGraph(List<PointMatch> matches) {
+    protected Map<PointMatch, Set<PointMatch>> constructGraph(List<PointMatch> matches) {
         Map<PointMatch, Set<PointMatch>> result = IntStream.range(0, matches.size())
                 .parallel()
                 .boxed()
@@ -300,11 +285,14 @@ public class GeometryDocker implements Docker {
         return endLineAngleDelta < MAX_ANGLE_DELTA;
     }
 
-    protected static List<SpinImage> computeSpinImageStack(Surface surface) {
-        return IntStream.range(0, surface.points.size())
-                .parallel()
-                .mapToObj(i -> SpinImage.compute(i, surface, 6.0, 1.0))
-                .collect(Collectors.toList());
+    protected List<SpinImage> computeSpinImageStack(Surface surface) {
+        if (!cache.containsKey(surface.name)) {
+            cache.put(surface.name, IntStream.range(0, surface.points.size())
+                    .parallel()
+                    .mapToObj(i -> SpinImage.compute(i, surface, 6.0, 1.0))
+                    .collect(Collectors.toList()));
+        }
+        return cache.get(surface.name);
     }
 
     private static double getMaxPenetration(DistanceGrid grid, Surface surface) {

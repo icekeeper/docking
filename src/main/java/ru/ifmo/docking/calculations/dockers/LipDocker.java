@@ -2,9 +2,9 @@ package ru.ifmo.docking.calculations.dockers;
 
 import com.google.common.collect.Lists;
 import ru.ifmo.docking.model.SpinImage;
-import ru.ifmo.docking.model.Surface;
 import ru.ifmo.docking.util.Pair;
 
+import java.io.File;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Queue;
@@ -15,8 +15,8 @@ public class LipDocker extends GeometryDocker {
     final double minLipDelta;
     final double maxLipDelta;
 
-    public LipDocker(Surface firstSurface, Surface secondSurface) {
-        super(firstSurface, secondSurface);
+    public LipDocker(File complexDir, String complex) {
+        super(complexDir, complex);
         Pair<Double, Double> lipDelta = getLipDelta();
         this.minLipDelta = -Math.log(lipDelta.first);
         this.maxLipDelta = -Math.log(lipDelta.second);

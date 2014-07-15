@@ -100,24 +100,12 @@ public class Atom {
 
         Atom atom = (Atom) o;
 
-        return chainId == atom.chainId
-                && resSeq == atom.resSeq
-                && serial == atom.serial
-                && name.equals(atom.name)
-                && recordName.equals(atom.recordName)
-                && resName.equals(atom.resName);
-
+        return serial == atom.serial;
     }
 
     @Override
     public int hashCode() {
-        int result = recordName.hashCode();
-        result = 31 * result + serial;
-        result = 31 * result + name.hashCode();
-        result = 31 * result + resName.hashCode();
-        result = 31 * result + (int) chainId;
-        result = 31 * result + resSeq;
-        return result;
+        return Integer.hashCode(serial);
     }
 
     @Override
@@ -143,7 +131,7 @@ public class Atom {
 
     public String getResidueUid() {
         if (resUid == null) {
-            resUid = resName + "_" + resSeq + "_" + iCode;
+            resUid = resSeq + "_" + iCode;
         }
         return resUid;
     }

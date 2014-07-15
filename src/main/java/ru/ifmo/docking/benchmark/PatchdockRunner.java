@@ -50,7 +50,7 @@ public class PatchdockRunner implements DockerRunner {
         }
 
         System.out.println("Start writing results");
-        runProcess("./transOutput.pl", complex + ".out", "0", "500000");
+        runProcess("./transOutput.pl", complex + ".out", "0", "10000");
 
         List<Supplier<Protein>> results = Lists.newArrayList();
         File currentDir = new File(".");
@@ -87,7 +87,7 @@ public class PatchdockRunner implements DockerRunner {
 
     private void preprocess(File receptorPdb, File ligandPdb) {
         try {
-            runProcess("./buildParams.pl", receptorPdb.getCanonicalPath(), ligandPdb.getCanonicalPath(), "4.0");
+            runProcess("./buildParams.pl", receptorPdb.getCanonicalPath(), ligandPdb.getCanonicalPath(), "2.0");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

@@ -1,11 +1,11 @@
 package ru.ifmo.docking.benchmark;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import ru.ifmo.docking.calculations.dockers.ElDocker;
 import ru.ifmo.docking.calculations.dockers.GeometryDocker;
 import ru.ifmo.docking.calculations.dockers.LipDocker;
-import ru.ifmo.docking.calculations.dockers.LipElDocker;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.geometry.Point;
 import ru.ifmo.docking.model.Atom;
@@ -15,13 +15,8 @@ import ru.ifmo.docking.util.PdbUtil;
 import ru.ifmo.docking.util.ProteinUtils;
 import ru.ifmo.docking.util.Timer;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.PrintWriter;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+import java.io.*;
+import java.util.*;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -54,9 +49,10 @@ public class RmsdTestMain {
         }
     }
 
+    private static File evalDir = new File("evaluated");
+
     public static List<String> parseParams(String[] args) {
         return Arrays.stream(args)
-                .filter(s -> s.startsWith("-"))
                 .collect(Collectors.toList());
     }
 
@@ -78,14 +74,47 @@ public class RmsdTestMain {
             renumerateAtoms(dir, proteinNames);
         }
 
-        if (params.contains("-benchmark")) {
-            runBenchmark(new ZdockRunner(), dir, proteinNames);
-            runBenchmark(new SpinImageDockerRunner("geometry", GeometryDocker::new), dir, proteinNames);
-            runBenchmark(new SpinImageDockerRunner("combined", LipElDocker::new), dir, proteinNames);
-            runBenchmark(new SpinImageDockerRunner("electric", ElDocker::new), dir, proteinNames);
-            runBenchmark(new SpinImageDockerRunner("lipophilic", LipDocker::new), dir, proteinNames);
-            runBenchmark(new PatchdockRunner(), dir, proteinNames);
+        if (params.contains("-process-only")) {
+            String name = params.get(params.indexOf("--process-only") + 1);
+            proteinNames = Lists.newArrayList(name);
         }
+
+        if (params.contains("-eval-dir")) {
+            String name = params.get(params.indexOf("-eval-dir") + 1);
+            evalDir = new File(name);
+        }
+
+        if (params.contains("-b")) {
+            if (!evalDir.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                evalDir.mkdirs();
+            }
+
+            List<String> dockers = Lists.newArrayList();
+            for (int i = 0; i < params.size(); i++) {
+                if (params.get(i).equals("-b")) {
+                    dockers.add(params.get(i + 1));
+                }
+            }
+
+            Map<String, DockerRunner> runners = Maps.newHashMap();
+            runners.put("geometry", new SpinImageDockerRunner("geometry", GeometryDocker::new));
+            runners.put("electric", new SpinImageDockerRunner("electric", ElDocker::new));
+            runners.put("lipophilic", new SpinImageDockerRunner("lipophilic", LipDocker::new));
+            runners.put("zdock", new ZdockRunner());
+            runners.put("patch_dock", new PatchdockRunner());
+
+            for (String docker : dockers) {
+                runBenchmark(runners.get(docker), dir, proteinNames);
+            }
+        }
+
+        if (params.contains("-compute-only")) {
+            computeResults(new FakeSpinRunner("geometry", GeometryDocker::new), dir, proteinNames);
+            computeResults(new FakeSpinRunner("lipophilic", LipDocker::new), dir, proteinNames);
+            computeResults(new FakeSpinRunner("electric", ElDocker::new), dir, proteinNames);
+        }
+
 
         if (params.contains("-eval")) {
             runDataEvaluation(dir, proteinNames);
@@ -93,17 +122,25 @@ public class RmsdTestMain {
     }
 
     private static void runBenchmark(DockerRunner runner, File dir, List<String> proteinNames) throws FileNotFoundException {
-        try (PrintWriter pw = new PrintWriter("report_" + runner.getName() + ".tsv")) {
-            pw.println(String.format("complex\tbest iRMSD\tcomputation time\ttotal results\ttotal hits"));
+        System.out.println("Runner: " + runner.getName() + ". Processing proteins: " + proteinNames);
+        for (String proteinName : proteinNames) {
+            try {
+                compareFiles(dir, proteinName, runner);
+            } catch (Exception e) {
+                System.out.println("Error processing: " + proteinName);
+                e.printStackTrace();
+            }
+        }
+    }
 
-            System.out.println("Runner: " + runner.getName() + ". Processing proteins: " + proteinNames);
-            for (String proteinName : proteinNames) {
-                try {
-                    compareFiles(pw, dir, proteinName, runner);
-                } catch (Exception e) {
-                    System.out.println("Error processing: " + proteinName);
-                    e.printStackTrace();
-                }
+    private static void computeResults(DockerRunner runner, File dir, List<String> proteinNames) throws FileNotFoundException {
+        System.out.println("Runner: " + runner.getName() + ". Processing proteins: " + proteinNames);
+        for (String proteinName : proteinNames) {
+            try {
+                runner.run(proteinName, dir, new Timer());
+            } catch (Exception e) {
+                System.out.println("Error processing: " + proteinName);
+                e.printStackTrace();
             }
         }
     }
@@ -148,6 +185,8 @@ public class RmsdTestMain {
         Protein boundLigandProtein = readProtein(proteinDir, complex + "_l_b");
 
         List<Pair<Atom, Atom>> alphaCarbonsMapping = ProteinUtils.matchAlphaCarbons(
+                proteinDir,
+                complex,
                 boundReceptorProtein,
                 boundLigandProtein,
                 unboundReceptorProtein,
@@ -158,7 +197,11 @@ public class RmsdTestMain {
         pw.println(String.format(Locale.US, "%s\t%f\t%d", complex, irmsd, alphaCarbonsMapping.size()));
     }
 
-    private static void compareFiles(PrintWriter pw, File dir, String complex, DockerRunner dockerRunner) {
+    private static void compareFiles(File dir, String complex, DockerRunner dockerRunner) {
+        if (new File(evalDir, dockerRunner.getName() + "_" + complex + ".eval").exists()) {
+            return;
+        }
+
         Timer timer = new Timer();
         List<Supplier<Protein>> results = dockerRunner.run(complex, dir, timer);
         System.out.println("Found " + results.size() + " solutions. Running time total: " + timer.getTime());
@@ -172,33 +215,41 @@ public class RmsdTestMain {
         Protein boundLigandProtein = readProtein(complexDir, complex + "_l_b");
 
         List<Pair<Atom, Atom>> alphaCarbonsMapping = ProteinUtils.matchAlphaCarbons(
+                complexDir,
+                complex,
                 boundReceptorProtein,
                 boundLigandProtein,
                 unboundReceptorProtein,
                 unboundLigandProtein
         );
 
-        List<Point> boundAlphaCarbonPoints = getBoundCarbonPoints(alphaCarbonsMapping);
-
         List<Pair<Double, Integer>> solutions = IntStream.range(0, results.size())
                 .parallel()
                 .mapToObj(i -> {
                     Protein dockedComplex = results.get(i).get();
-                    List<Point> dockedAlphaCarbonPoints = getUnboundCarbonPoints(dockedComplex, alphaCarbonsMapping);
-                    return Pair.of(Geometry.rmsd(boundAlphaCarbonPoints, dockedAlphaCarbonPoints), i);
+                    Pair<List<Point>, List<Point>> points = unzip(getCarbonPoints(dockedComplex, alphaCarbonsMapping));
+                    return Pair.of(Geometry.minRmsd(points.first, points.second), i);
                 })
                 .collect(Collectors.toList());
 
+        writeSolutions(dockerRunner.getName() + "_" + complex, solutions);
 
-        Pair<Double, Integer> minRmsd = solutions.stream().min((o1, o2) -> Double.compare(o1.first, o2.first)).get();
-        long hits = solutions.stream().filter(p -> p.first < 2.5).count();
+        System.out.println("Processed complex " + complex);
 
-        System.out.println("For complex " + complex + " minimum rmsd is: " + minRmsd.first + " hits: " + hits);
-
-        pw.println(String.format(Locale.US, "%s\t%f\t%d\t%d\t%d", complex, minRmsd.first, timer.getTime(), results.size(), hits));
-        pw.flush();
+//        pw.println(String.format(Locale.US, "%s\t%f\t%d\t%d\t%d\t%d\t%d", complex, minRmsd.first, timer.getTime(), results.size(), hits, hits2k, hits50k));
+//        pw.flush();
 
         dockerRunner.cleanup(complex);
+    }
+
+    private static void writeSolutions(String prefix, List<Pair<Double, Integer>> solutions) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(new File(evalDir, prefix + ".eval")))) {
+            for (Pair<Double, Integer> solution : solutions) {
+                writer.write(String.format(Locale.US, "%d\t%f\n", solution.second, solution.first));
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static void printAtomsThatDiffer(Protein dockedComplex, Protein unboundReceptorProtein, Protein unboundLigandProtein) {
@@ -225,26 +276,30 @@ public class RmsdTestMain {
         return PdbUtil.readPdbFile(pdb);
     }
 
-    private static List<Point> getBoundCarbonPoints(List<Pair<Atom, Atom>> alphaCarbonsMapping) {
+    private static List<Pair<Point, Point>> getCarbonPoints(Protein complex, List<Pair<Atom, Atom>> alphaCarbonsMapping) {
+        Map<Integer, Point> complexMap = Maps.newHashMap();
+        for (Atom atom : complex.getAtoms()) {
+            complexMap.put(atom.serial, atom.getPoint());
+        }
+
         return alphaCarbonsMapping
                 .stream()
-                .map(pair -> pair.first.getPoint())
+                .filter(p -> complexMap.containsKey(p.second.serial))
+                .map(p -> Pair.of(p.first.getPoint(), complexMap.get(p.second.serial)))
                 .collect(Collectors.toList());
     }
 
-    private static List<Point> getUnboundCarbonPoints(Protein complex, List<Pair<Atom, Atom>> alphaCarbonsMapping) {
-        return alphaCarbonsMapping
-                .stream()
-                .map(Pair::getSecond)
-                .map(atom -> complex.getAtoms().get(complex.getAtoms().indexOf(atom)))
-                .map(Atom::getPoint)
-                .collect(Collectors.toList());
+    private static <T, U> Pair<List<T>, List<U>> unzip(List<Pair<T, U>> pairs) {
+        return Pair.<List<T>, List<U>>of(
+                pairs.stream().map(Pair::getFirst).collect(Collectors.toList()),
+                pairs.stream().map(Pair::getSecond).collect(Collectors.toList())
+        );
     }
 
     private static double computeInterfaceRmsd(List<Pair<Atom, Atom>> alphaCarbonMatching) {
         List<Point> bound = alphaCarbonMatching.stream().map(pair -> pair.first.getPoint()).collect(Collectors.toList());
         List<Point> unbound = alphaCarbonMatching.stream().map(pair -> pair.second.getPoint()).collect(Collectors.toList());
-        return Geometry.rmsd(bound, unbound);
+        return Geometry.minRmsd(bound, unbound);
     }
 
 }

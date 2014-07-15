@@ -58,4 +58,21 @@ public class IOUtils {
             return ORDERED | IMMUTABLE | NONNULL;
         }
     }
+
+    private void runProcess(String... args) {
+        try {
+            ProcessBuilder processBuilder = new ProcessBuilder(args);
+            System.out.println("Running " + String.join(" ", processBuilder.command()));
+            Process process = processBuilder.start();
+            while (process.isAlive()) {
+                try {
+                    process.waitFor();
+                } catch (InterruptedException ignored) {
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 }

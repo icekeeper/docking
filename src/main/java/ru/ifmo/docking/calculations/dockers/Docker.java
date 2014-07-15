@@ -6,4 +6,6 @@ import java.util.List;
 
 public interface Docker {
     List<RealMatrix> run();
+
+    List<RealMatrix> rescore(List<RealMatrix> solutions);
 }

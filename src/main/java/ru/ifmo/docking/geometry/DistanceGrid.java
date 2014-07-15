@@ -46,6 +46,10 @@ public class DistanceGrid {
         Arrays.fill(distances, Double.MAX_VALUE);
 
         int groupSize = surfacePointsCount / Runtime.getRuntime().availableProcessors();
+        if (distances.length > 100000000) {
+            groupSize = surfacePointsCount / (Runtime.getRuntime().availableProcessors() / 2);
+        }
+
         List<Pair<Integer, Integer>> groups = Lists.newArrayList();
         int k = 0;
         while (k < surfacePointsCount) {

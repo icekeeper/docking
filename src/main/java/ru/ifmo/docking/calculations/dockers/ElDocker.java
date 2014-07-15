@@ -2,9 +2,9 @@ package ru.ifmo.docking.calculations.dockers;
 
 import com.google.common.collect.Lists;
 import ru.ifmo.docking.model.SpinImage;
-import ru.ifmo.docking.model.Surface;
 import ru.ifmo.docking.util.Pair;
 
+import java.io.File;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Queue;
@@ -15,8 +15,8 @@ public class ElDocker extends GeometryDocker {
     final double minElDelta;
     final double maxElDelta;
 
-    public ElDocker(Surface firstSurface, Surface secondSurface) {
-        super(firstSurface, secondSurface);
+    public ElDocker(File complexDir, String complex) {
+        super(complexDir, complex);
         Pair<Double, Double> elDelta = getElDelta();
         this.minElDelta = -Math.log(elDelta.first);
         this.maxElDelta = -Math.log(elDelta.second);

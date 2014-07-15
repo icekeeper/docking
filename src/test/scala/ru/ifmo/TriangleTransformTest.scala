@@ -47,7 +47,7 @@ class TriangleTransformTest extends FlatSpec with Matchers {
     val p7 = new Point(0.0, 2.0, 2.0)
     val p8 = new Point(0.0, 2.0, 0.0)
 
-    val rmsd = Geometry.rmsd(List(p1, p2, p3, p4), List(p5, p6, p7, p8))
+    val rmsd = Geometry.minRmsd(List(p1, p2, p3, p4), List(p5, p6, p7, p8))
 
     rmsd should equal(0.0 +- 1e-15)
   }

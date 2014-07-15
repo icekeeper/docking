@@ -45,7 +45,7 @@ public class Geometry {
         return new Point(x / points.size(), y / points.size(), z / points.size());
     }
 
-    public static double rmsd(List<Point> x, List<Point> y) {
+    public static double minRmsd(List<Point> x, List<Point> y) {
         RealMatrix optimalRmsdTransition = Geometry.findRmsdOptimalTransformationMatrix(x, y);
         List<Point> tx = x
                 .stream()
@@ -58,6 +58,15 @@ public class Geometry {
             s += d * d;
         }
         return FastMath.sqrt(s / tx.size());
+    }
+
+    public static double rmsd(List<Point> x, List<Point> y) {
+        double s = 0.0;
+        for (int i = 0; i < x.size(); i++) {
+            double d = distance(x.get(i), y.get(i));
+            s += d * d;
+        }
+        return FastMath.sqrt(s / x.size());
     }
 
     /**

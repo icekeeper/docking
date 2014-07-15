@@ -7,6 +7,8 @@ import scala.collection.parallel.ParSeq
 import ru.ifmo.docking.model.{SpinImage, Surface}
 import scala.collection.JavaConversions._
 import ru.ifmo.docking.geometry.{Geometry, Point}
+import scala.collection.immutable.Range
+import org.jfree.chart.renderer.xy._
 
 object SpinImageTest {
 
@@ -43,10 +45,11 @@ object SpinImageTest {
     //            printContactPointsStats(first, second)
     //            printSurfaceStats(first, second)
     //    searchDockingSolutions(first, second)
-    //    drawGeometryHistogramm(first, second)
+    //            drawGeometryHistogramm(first, second)
+    //    drawGeometryDependence(first, second)
     //        testFunction(first, second)
-    //    drawLipHistogram(first, second)
-    //    drawElHistogram(first, second)
+    drawLipHistogram(first, second)
+    //        drawElHistogram(first, second)
   }
 
   def printPLYFiles(first: Surface, second: Surface) {
@@ -310,7 +313,7 @@ object SpinImageTest {
     val secondStack: IndexedSeq[(Int, SpinImage)] = spinImageStack(second)
     println(s"Computed second stack ")
 
-    val secondStackGrouped = secondStack.grouped(secondStack.size / 1024).toSeq
+    val secondStackGrouped = secondStack.grouped(secondStack.size / Runtime.getRuntime.availableProcessors()).toSeq
 
     val binCount = 1000
     val binSize = 2.0 / (binCount - 1)
@@ -336,13 +339,67 @@ object SpinImageTest {
     binsArray.foreach {
       b => b.zipWithIndex.foreach(p => bins(p._2) += p._1)
     }
-    val data = bins.zipWithIndex.map(bin => (bin._2, bin._1)).toIterable
-    val chart = XYBarChart(data, title = "Lipophilicity histogram")
-    chart.show()
+    val data = bins.zipWithIndex.map(bin => (binSize * bin._2 - 1, bin._1)).toIterable.toXYSeries()
+    val chart = XYLineChart(data, legend = false)
+    chart.plot.getDomainAxis.setLabel("значение коэффицента корреляции карт вращения")
+    chart.plot.getRangeAxis.setLabel("число пар точек")
+    val renderer: XYAreaRenderer = new XYAreaRenderer()
+    chart.plot.setRenderer(renderer)
+    //    chart.show()
+    chart.saveAsPNG("spin_1tgs_hist.png", (600, 400))
   }
 
+  def drawGeometryDependence(first: Surface, second: Surface) {
+    def getTopPointsCount(r: Double): Int = {
+      println(s"Computing for r = $r")
+      def spinImageStack(surface: Surface): IndexedSeq[(Int, SpinImage)] = ((0 until surface.points.size()).par map {
+        i => (i, SpinImage.compute(i, surface, r, 1.0))
+      }).toIndexedSeq
+
+
+      val firstStack: IndexedSeq[(Int, SpinImage)] = spinImageStack(first)
+      //      println(s"Computed first stack ")
+      val secondStack: IndexedSeq[(Int, SpinImage)] = spinImageStack(second)
+      //      println(s"Computed second stack ")
+
+      val secondStackGrouped = secondStack.grouped(secondStack.size / Runtime.getRuntime.availableProcessors()).toSeq
+
+      (secondStackGrouped.par flatMap {
+        group: IndexedSeq[(Int, SpinImage)] => {
+          val buffer = new mutable.PriorityQueue[(Int, Int, Double)]()(Ordering.by(-_._3))
+          for (a <- group; b <- firstStack) {
+            val correlation: Double = a._2 correlation b._2
+            if (buffer.length < 50000 || buffer.head._3 < correlation) {
+              buffer += ((b._1, a._1, correlation))
+            }
+            if (buffer.length > 50000) {
+              buffer.dequeue()
+            }
+          }
+          buffer
+        }
+      }).seq
+        .sortBy(-_._3)
+        .take(50000)
+        .count(p => (first.points.get(p._1) distance second.points.get(p._2)) < 1.0)
+    }
+
+    val data = Range.Double.inclusive(5.0, 20.0, 0.1).map(r => (r, getTopPointsCount(r)))
+
+    println(s"Computed data: $data")
+    //    val data = List((1, 5.0), (2, 10.0), (3, 2.0), (4, 8.0))
+    val chart = XYLineChart(data, legend = false)
+    chart.plot.getDomainAxis.setLabel("радиус ограничивающей сферы")
+    chart.plot.getRangeAxis.setLabel("число близких пар")
+    chart.saveAsPNG("spin_radius2.png", (600, 400))
+    //    chart.show(resolution = (600, 400))
+
+  }
+
+
   def drawLipHistogram(first: Surface, second: Surface) {
-    def smooth(v: Double) = -Math.log(v)
+    //    def smooth(v: Double) = -Math.log(v)
+    def smooth(v: Double) = v
     val maxDelta = (for (a <- first.lipophilicity.iterator;
                          b <- second.lipophilicity.iterator) yield smooth(Math.abs(a - b))).max
     val minDelta = (for (a <- first.lipophilicity.iterator;
@@ -350,7 +407,8 @@ object SpinImageTest {
 
     println(s"Lipophilicity delta lies in [$minDelta; $maxDelta]")
 
-    def corr(a: Double, b: Double): Double = (smooth(Math.abs(a - b)) - minDelta) / (maxDelta - minDelta)
+    //    def corr(a: Double, b: Double): Double = (smooth(Math.abs(a - b)) - minDelta) / (maxDelta - minDelta)
+    def corr(a: Double, b: Double): Double = Math.abs(a - b)
 
     val max = (for (a <- first.lipophilicity.iterator;
                     b <- second.lipophilicity.iterator) yield corr(a, b)).max
@@ -371,13 +429,20 @@ object SpinImageTest {
       bins(Math.round(corr(a, b) / binSize).toInt) += 1
     }
 
-    val data = bins.zipWithIndex.map(bin => (bin._2, bin._1)).toIterable
-    val chart = XYBarChart(data, title = "Lipophilicity histogram")
+    val data = bins.zipWithIndex.map(bin => (bin._2 * binSize, bin._1)).toIterable
+
+    val chart = XYLineChart(data, legend = false)
+    chart.plot.getDomainAxis.setLabel("нормированный модуль разности потенциалов")
+    chart.plot.getRangeAxis.setLabel("число пар точек")
+    val renderer: XYAreaRenderer = new XYAreaRenderer()
+    chart.plot.setRenderer(renderer)
     chart.show()
+    //    chart.saveAsPNG("lip_1tgs_hist_norm.png", (600, 400))
   }
 
   def drawElHistogram(first: Surface, second: Surface) {
     def smooth(v: Double) = -Math.log(v)
+    //    def smooth(v: Double) = v
     val maxDelta = (for (a <- first.electricity.iterator;
                          b <- second.electricity.iterator) yield smooth(Math.abs(a + b))).max
     val minDelta = (for (a <- first.electricity.iterator;
@@ -387,6 +452,7 @@ object SpinImageTest {
 
 
     def corr(a: Double, b: Double): Double = (smooth(Math.abs(a + b)) - minDelta) / (maxDelta - minDelta)
+    //    def corr(a: Double, b: Double): Double = Math.abs(a + b)
 
     val max = (for (a <- first.electricity.iterator;
                     b <- second.electricity.iterator) yield corr(a, b)).max
@@ -405,9 +471,15 @@ object SpinImageTest {
       bins(Math.max(Math.round(corr(a, b) / binSize).toInt, 0)) += 1
     }
 
-    val data = bins.zipWithIndex.map(bin => (bin._2, bin._1)).toIterable
-    val chart = XYBarChart(data, title = "Electricity histogram")
-    chart.show()
+    val data = bins.zipWithIndex.map(bin => (bin._2 * binSize, bin._1)).toIterable
+
+    val chart = XYLineChart(data, legend = false)
+    chart.plot.getDomainAxis.setLabel("нормированная сумма потенциалов")
+    chart.plot.getRangeAxis.setLabel("число пар точек")
+    val renderer: XYAreaRenderer = new XYAreaRenderer()
+    chart.plot.setRenderer(renderer)
+    //        chart.show()
+    chart.saveAsPNG("el_1tgs_hist_norm.png", (600, 400))
   }
 
   def printSurfaceStats(first: Surface, second: Surface) {

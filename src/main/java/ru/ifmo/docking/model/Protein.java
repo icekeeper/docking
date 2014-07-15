@@ -6,6 +6,7 @@ import com.google.common.collect.Maps;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class Protein {
     private final String name;
@@ -29,6 +30,10 @@ public class Protein {
             result.get(atom.getResidueUid()).add(atom);
         }
         return result;
+    }
+
+    public List<Atom> getChain(char chainId) {
+        return atoms.stream().filter(a -> a.chainId == chainId).collect(Collectors.toList());
     }
 
     public String getName() {

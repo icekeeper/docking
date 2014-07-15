@@ -7,12 +7,12 @@ import ru.ifmo.docking.calculations.dockers.Docker;
 import ru.ifmo.docking.geometry.Geometry;
 import ru.ifmo.docking.model.Atom;
 import ru.ifmo.docking.model.Protein;
-import ru.ifmo.docking.model.Surface;
 import ru.ifmo.docking.util.IOUtils;
 import ru.ifmo.docking.util.PdbUtil;
 import ru.ifmo.docking.util.Timer;
 
 import java.io.*;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
@@ -20,10 +20,10 @@ import java.util.stream.Collectors;
 
 public class SpinImageDockerRunner implements DockerRunner {
 
-    private final BiFunction<Surface, Surface, Docker> dockerSupplier;
+    private final BiFunction<File, String, Docker> dockerSupplier;
     private final String name;
 
-    public SpinImageDockerRunner(String name, BiFunction<Surface, Surface, Docker> dockerSupplier) {
+    public SpinImageDockerRunner(String name, BiFunction<File, String, Docker> dockerSupplier) {
         this.name = name;
         this.dockerSupplier = dockerSupplier;
     }
@@ -42,30 +42,21 @@ public class SpinImageDockerRunner implements DockerRunner {
 
         File resultTs = new File(resultsFileDir, complex + ".ts");
         File resultFile = new File(resultsFileDir, complex + ".out");
-        List<RealMatrix> results;
+        List<RealMatrix> results = Collections.emptyList();
+        Docker docker = dockerSupplier.apply(complextDir, complex);
 
         if (resultTs.exists()) {
             System.out.println("Result exists. Read from file");
             timer.setTime(readLong(new File(resultsFileDir, complex + ".ts")));
-            results = readResultsFile(resultFile);
-        } else {
-            System.out.println("Run spin docker on: " + complex);
+            try {
+                results = docker.rescore(readResultsFile(resultFile));
+            } catch (Exception e) {
+                results = Collections.emptyList();
+            }
+        }
 
-            Surface firstSurface = Surface.read(unboundReceptorFile,
-                    new File(complextDir, unboundReceptorFile + ".obj"),
-                    new File(complextDir, unboundReceptorFile + ".pdb"),
-                    new File(complextDir, unboundReceptorFile + ".pqr"),
-                    new File("fi_potentials.txt")
-            );
-
-            Surface secondSurface = Surface.read(unboundLigandFile,
-                    new File(complextDir, unboundLigandFile + ".obj"),
-                    new File(complextDir, unboundLigandFile + ".pdb"),
-                    new File(complextDir, unboundLigandFile + ".pqr"),
-                    new File("fi_potentials.txt")
-            );
-
-            Docker docker = dockerSupplier.apply(firstSurface, secondSurface);
+        if (results.isEmpty()) {
+            System.out.println("Run " + name + " docker on: " + complex);
 
             timer.start();
             results = docker.run();
@@ -78,6 +69,16 @@ public class SpinImageDockerRunner implements DockerRunner {
 
         Protein unboundReceptorProtein = PdbUtil.readPdbFile(new File(complextDir, unboundReceptorFile + ".pdb"));
         Protein unboundLigandProtein = PdbUtil.readPdbFile(new File(complextDir, unboundLigandFile + ".pdb"));
+
+//        for (int i = 0; i < 10; i++) {
+//            RealMatrix matrix = results.get(i);
+//            List<Atom> transformed = unboundLigandProtein.getAtoms()
+//                    .stream()
+//                    .map(atom -> transformAtom(atom, matrix))
+//                    .collect(Collectors.toList());
+//            PdbUtil.writePdb(new File("best_" + i + ".pdb"), new Protein("", transformed));
+//        }
+
 
         //noinspection RedundantCast
         return results.stream()
@@ -165,7 +166,7 @@ public class SpinImageDockerRunner implements DockerRunner {
     }
 
     private Long readLong(File file) {
-        return IOUtils.linesStream(file).map(Long::parseLong).findFirst().get();
+        return IOUtils.linesStream(file).map(Long::parseLong).findFirst().orElse(0L);
     }
 
     private void writeLong(File file, long value) {

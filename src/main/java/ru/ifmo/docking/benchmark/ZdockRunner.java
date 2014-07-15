@@ -39,9 +39,9 @@ public class ZdockRunner implements DockerRunner {
 
         File resultTs = new File(resultsFileDir, complex + ".ts");
 
-        if (resultTs.exists()) {
+        if (resultTs.exists() && readLong(resultTs) != 0) {
             System.out.println("Result exists. Only creating results.");
-            timer.setTime(readLong(new File(resultsFileDir, complex + ".ts")));
+            timer.setTime(readLong(resultTs));
             runProcess("cp", resultsFileDir.getName() + "/" + complex + ".out", complex + ".out");
         } else {
             System.out.println("Start docking");
